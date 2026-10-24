@@ -34,7 +34,7 @@ def run_e2e_test():
     # 2. Test Patient Profile Setup
     print("\n[Step 2] Testing Patient Registration / Authentication...")
     test_email = "clinical_test_patient@voiceai.org"
-    test_password = "ClinicalSecret2026!"
+    test_password = os.environ.get("SUPABASE_TEST_PASSWORD") or sys.exit("Set SUPABASE_TEST_PASSWORD to the test patient password.")
     test_name = "Eleanor Vance (Test)"
     test_condition = "Cerebral Palsy (Ataxic Dysarthria)"
 

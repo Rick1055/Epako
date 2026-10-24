@@ -68,9 +68,6 @@ class DysarthriaSpeechRecognizer:
             )
         latency_ms = (time.time() - start_time) * 1000.0
 
-        if self.device == "cuda":
-            torch.cuda.empty_cache()
-
         return {
             "text": result["text"].strip(),
             "latency_ms": float(latency_ms),

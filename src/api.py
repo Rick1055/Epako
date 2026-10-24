@@ -8,8 +8,6 @@ Endpoints:
 - POST /api/biomarkers    : Clinical bio-acoustic telemetry extraction (Speech Gym)
 - POST /api/voice/sculpt  : Real-time vocal parameter sculpting (Warmth, Cadence, Pitch)
 - POST /api/voice/bank    : Pre-morbid voice note acoustic extraction & profile banking
-- POST /api/session/save  : Persists patient clinical reflection & biomarkers to Supabase
-- GET  /api/session/history : Retrieves historical biomarker trends
 - GET  /health            : Service health and GPU compute status
 """
 
@@ -205,13 +203,6 @@ class VoiceSculptRequest(BaseModel):
     rate_pct: Optional[int] = 0
     warmth_pct: Optional[int] = 68
     roughness_pct: Optional[int] = 0
-
-
-class ClinicalJournalSaveRequest(BaseModel):
-    patient_id: str = "EP-8842"
-    reflection_notes: str
-    biomarkers: Optional[Dict[str, Any]] = None
-    session_rating: Optional[int] = 5
 
 
 class ClinicalPdfReportRequest(BaseModel):
@@ -462,30 +453,6 @@ async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
                     os.remove(p)
                 except Exception:
                     pass
-
-
-@app.post("/api/session/save")
-def save_clinical_journal(req: ClinicalJournalSaveRequest):
-    """
-    Clinical Recovery Journal: Persists patient notes and biomarker telemetry to Supabase.
-    """
-    sm = get_supabase_manager()
-    session_data = {
-        "patient_id": req.patient_id,
-        "reflection": req.reflection_notes,
-        "biomarkers": req.biomarkers or {"stability": 96.4, "velocity": 142},
-        "rating": req.session_rating,
-        "timestamp": time.time(),
-    }
-
-    if sm and sm.client:
-        try:
-            res = sm.client.table("clinical_sessions").insert(session_data).execute()
-            return {"success": True, "saved_to": "supabase", "data": res.data}
-        except Exception as e:
-            print(f"[!] Supabase session save fallback: {e}")
-
-    return {"success": True, "saved_to": "local_cache", "data": session_data}
 
 
 # ---------------------------------------------------------------------------

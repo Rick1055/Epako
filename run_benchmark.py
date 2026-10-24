@@ -14,11 +14,11 @@ import json
 import asyncio
 import numpy as np
 import soundfile as sf
-import librosa
 
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
+import local_tts
 from synthetic_dysarthria import SyntheticDysarthriaEngine
 from intent_repair import IntentRepair
 from biomarker_engine import (

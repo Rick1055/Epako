@@ -371,9 +371,9 @@ class SupabaseManager:
             self.client.table("patient_daily_progress")
             .select("*")
             .eq("patient_id", pid)
-            .order("session_date", desc=False)
+            .order("session_date", desc=True)
             .limit(limit_days)
             .execute()
         )
 
-        return res.data or []
+        return (res.data or [])[::-1]

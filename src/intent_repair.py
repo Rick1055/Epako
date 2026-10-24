@@ -92,32 +92,3 @@ if __name__ == "__main__":
     print(f"    Repaired : '{res2['repaired_text']}'")
     print(f"    Latency  : {res2['latency_ms']:.2f} ms")
     print("=" * 65)
-
-
-
-if __name__ == "__main__":
-    print("=" * 65)
-    print("TESTING CONTEXTUAL INTENT & DYSFLUENCY REPAIR")
-    print("=" * 65)
-
-    # 1. Test Without Patient Memory (Pure Stutter Cleaning)
-    standalone_repair = IntentRepair()
-    raw_stutter = "he really crucified him he he nailed it for a yard less"
-    res1 = standalone_repair.repair(raw_stutter)
-
-    print("\n[>] Test 1: Stutter Removal & Grammar Polishing (No Patient Memory)")
-    print(f"    Original : '{res1['original_text']}'")
-    print(f"    Repaired : '{res1['repaired_text']}'")
-    print(f"    Latency  : {res1['latency_ms']:.2f} ms")
-
-    # 2. Test WITH Patient Memory (FeedbackEngine attached)
-    fb_engine = FeedbackEngine(patient_id="test_patient_001")
-    personalized_repair = IntentRepair(feedback_engine=fb_engine)
-    res2 = personalized_repair.repair(raw_stutter)
-
-    print("\n[>] Test 2: Full Repair (Stutter Removed + Patient Memory Applied)")
-    print(f"    Original : '{res2['original_text']}'")
-    print(f"    Repaired : '{res2['repaired_text']}'")
-    print(f"    Latency  : {res2['latency_ms']:.2f} ms")
-    print("=" * 65)
-    

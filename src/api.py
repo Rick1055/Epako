@@ -26,10 +26,9 @@ import librosa
 import soundfile as sf
 import edge_tts
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Query, Request, Response, Header, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException, Request, Response, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -197,15 +196,6 @@ async def synthesize_neural_async(
 # ---------------------------------------------------------------------------
 # Pydantic Request Models
 # ---------------------------------------------------------------------------
-class AudioRectifyRequest(BaseModel):
-    audio_base64: str = Field(..., description="Base64 encoded audio string or Data URL")
-    voice_template: Optional[str] = "male_smooth_warm"
-    pitch_hz: Optional[int] = 0
-    rate_pct: Optional[int] = 0
-    warmth_pct: Optional[int] = 68
-    roughness_pct: Optional[int] = 0
-
-
 class VoiceSculptRequest(BaseModel):
     sample_phrase: Optional[str] = "The morning sun gently illuminates the quiet cedar grove."
     template: Optional[str] = "male_smooth_warm"

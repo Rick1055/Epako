@@ -7,6 +7,7 @@ acoustic biomarker recovery (Formant Compression Index, Jitter, Shimmer, Articul
 """
 
 import os
+import re
 import sys
 import time
 import json
@@ -33,8 +34,8 @@ import edge_tts
 # ---------------------------------------------------------------------------
 def compute_wer(reference: str, hypothesis: str) -> float:
     """Computes Word Error Rate between ground truth reference and hypothesis."""
-    ref_words = reference.lower().strip().split()
-    hyp_words = hypothesis.lower().strip().split()
+    ref_words = re.sub(r"[^\w\s]", "", reference.lower()).split()
+    hyp_words = re.sub(r"[^\w\s]", "", hypothesis.lower()).split()
 
     if not ref_words:
         return 0.0 if not hyp_words else 1.0
@@ -97,11 +98,7 @@ def run_benchmark():
         asr_engine = DysarthriaSpeechRecognizer()
         print("[+] SOTA Parakeet-TDT ASR Engine Loaded.")
     except Exception as e:
-        print(f"[!] Live ASR fallback (Offline mode: {e})")
-        class FastSimulatedASR:
-            def transcribe(self, audio, **kwargs):
-                return {"text": "the the morning sun gently illuminates the quiet cedar grove", "latency_ms": 110.0}
-        asr_engine = FastSimulatedASR()
+        sys.exit(f"[!] Real ASR model failed to load, benchmark aborted: {e}")
 
     benchmark_records = []
 

@@ -13,6 +13,8 @@ Mandatory Design Guidelines:
 import os
 import io
 import time
+import functools
+import threading
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
 
@@ -46,14 +48,18 @@ COLOR_TERRACOTTA = colors.HexColor("#D87D65")     # Clinical alert accent
 COLOR_MUTED_BG = colors.HexColor("#F8F6F0")       # Washi linen surface tint
 
 
+_CHART_LOCK = threading.Lock()
+
+
 class NumberedCanvas(canvas.Canvas):
     """
     Two-pass canvas to dynamically compute total pages and stamp
     dignified clinical footer with pagination and digital signature hash.
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, session_id=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._saved_page_states = []
+        self.session_id = session_id
 
     def showPage(self):
         self._saved_page_states.append(dict(self.__dict__))
@@ -203,7 +209,6 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
 
     # Attach session id to canvas instance for dynamic headers
     session_id = report_data.get("session_id", f"EPK-{int(time.time()) % 1000000:06d}")
-    NumberedCanvas.session_id = session_id
 
     # Typography & Styles
     styles = getSampleStyleSheet()
@@ -470,7 +475,8 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
     # 4. ACOUSTIC CHARTS (VOWEL SPACE & VELOCITY TRAJECTORY)
     # ---------------------------------------------------------------------------
     story.append(Paragraph("Acoustic Geometry &amp; Longitudinal Recovery Trajectory", section_header_style))
-    chart_buf = generate_acoustic_charts(bio, report_data.get("history"))
+    with _CHART_LOCK:
+        chart_buf = generate_acoustic_charts(bio, report_data.get("history"))
     chart_img = Image(chart_buf, width=544, height=140)
     story.append(chart_img)
     story.append(Spacer(1, 4))
@@ -573,7 +579,7 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
     story.append(sig_table)
 
     # Build PDF
-    doc.build(story, canvasmaker=NumberedCanvas)
+    doc.build(story, canvasmaker=functools.partial(NumberedCanvas, session_id=session_id))
     pdf_bytes = pdf_buffer.getvalue()
     pdf_buffer.close()
 

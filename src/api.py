@@ -16,6 +16,7 @@ import io
 import time
 import json
 import base64
+import tempfile
 import asyncio
 from typing import Optional, Dict, Any, List
 
@@ -140,15 +141,19 @@ def audio_to_base64_wav(audio: np.ndarray, sample_rate: int = 16000) -> str:
 async def synthesize_neural_async(
     text: str,
     voice: str = "en-US-GuyNeural",
-    output_path: str = "temp_async.wav",
     pitch: str = "+0Hz",
     rate: str = "+0%",
 ) -> Dict[str, Any]:
     """Async neural voice synthesis with zero event-loop blocking."""
     start = time.time()
     communicate = edge_tts.Communicate(text, voice, pitch=pitch, rate=rate)
-    await communicate.save(output_path)
-    audio, sr = sf.read(output_path, dtype="float32")
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        output_path = tmp.name
+    try:
+        await communicate.save(output_path)
+        audio, sr = sf.read(output_path, dtype="float32")
+    finally:
+        os.remove(output_path)
     if audio.ndim > 1:
         audio = np.mean(audio, axis=1)
     if sr != 16000:
@@ -294,7 +299,6 @@ async def rectify_speech(
         synth_res = await synthesize_neural_async(
             text=repaired_text,
             voice=voice_id,
-            output_path="temp_rectified.wav",
             pitch=pitch,
             rate=rate,
         )
@@ -372,7 +376,6 @@ async def sculpt_voice_timbre(request: VoiceSculptRequest):
     synth_res = await synthesize_neural_async(
         text=request.sample_phrase,
         voice=profile["voice_id"],
-        output_path="temp_sculpted.wav",
         pitch=profile["pitch"],
         rate=profile["rate"],
     )
@@ -548,7 +551,7 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                 repaired = repair.repair(raw_text).get("repaired_text", raw_text)
 
                 if repaired:
-                    synth = await synthesize_neural_async(repaired, voice="en-US-GuyNeural", output_path="ws_temp.wav")
+                    synth = await synthesize_neural_async(repaired, voice="en-US-GuyNeural")
                     audio_b64 = audio_to_base64_wav(synth["audio"], 16000)
                 else:
                     audio_b64 = audio_to_base64_wav(utterance_audio, 16000)

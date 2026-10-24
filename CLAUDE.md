@@ -8,7 +8,7 @@ DysTTS / "Epako Voice AI": a dysarthric-speech correction pipeline. Patient audi
 
 ## Commands
 
-No build system, linter, or test suite is configured (pytest is in `requirements.txt` but there is no `tests/` dir). Windows / PowerShell environment.
+No build system is configured. Windows / PowerShell environment. Tests: `python -m pytest tests` (unit tests, fast). `tests/test_rls.py` attacks every migration on an embedded Postgres and is skipped unless `pip install pgserver psycopg2-binary` (and pyflakes for the undefined-name guard); CI installs all three.
 
 - Install: `pip install -r requirements.txt`, then download the six TTS voices (not in git, `models/` is ignored): for each name in `VoiceRestorationEngine.voice_palette` run `python -m piper.download_voices <name> --download-dir models/piper`
 - Run API: `python src/api.py` (uvicorn on port 8000; it calls `uvicorn.run("api:app")`, so it must be run from/with `src/` resolvable, and `src/` modules import each other without the package prefix)
@@ -17,7 +17,7 @@ No build system, linter, or test suite is configured (pytest is in `requirements
 - Fetch the TORGO mini-dataset (streams from U. Toronto archives): `python scripts/fetch_mini_torgo.py`
 - Modules with a `main()` smoke test: `src/data_ingestion.py`, `src/biomarker_engine.py`, `src/synthetic_dysarthria.py` — run directly, e.g. `python src/data_ingestion.py` (expects `data/TORGO` relative to cwd)
 
-Config via `.env` (loaded with python-dotenv, gitignored): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_KEY`.
+Config via `.env` (loaded with python-dotenv, gitignored): `SUPABASE_URL`, `SUPABASE_KEY` (the **anon** key), `SUPABASE_SERVICE_ROLE_KEY` (server only; biomarkers, sessions, deletion and the rate limiter need it), optional `CORS_ALLOWED_ORIGINS`, `PIPER_VOICES_DIR`, `SUPABASE_TEST_PASSWORD`.
 
 ## Architecture
 

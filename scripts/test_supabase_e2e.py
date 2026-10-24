@@ -87,7 +87,7 @@ def run_e2e_test():
         folder="raw",
         sample_rate=sr,
     )
-    print(f" [+] Raw Audio Uploaded! Public URL: {raw_url}")
+    print(f" [+] Raw Audio Uploaded! Object path: {raw_url}")
 
     restored_url = mgr.upload_audio(
         audio_data=test_waveform,
@@ -95,7 +95,7 @@ def run_e2e_test():
         folder="restored",
         sample_rate=sr,
     )
-    print(f" [+] Restored Audio Uploaded! Public URL: {restored_url}")
+    print(f" [+] Restored Audio Uploaded! Object path: {restored_url}")
 
     # 5. Speech Gym Therapy Session & Utterance Logging
     print("\n[Step 5] Logging Live Therapy Session & Utterances...")

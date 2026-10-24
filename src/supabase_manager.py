@@ -199,13 +199,13 @@ class SupabaseManager:
 
     def upload_audio(self, audio_data: Union[np.ndarray, bytes, str],
                      remote_filename: str,
-                     patient_id: Optional[str] = None,
                      folder: str = "raw",
                      sample_rate: int = 16000,
                      ) -> str:
 
-        pid = patient_id or (self.current_profile["id"] if self.current_profile else "anonymous")
-        remote_path = f"{pid}/{folder}/{remote_filename}"
+        if not self.current_user:
+            raise RuntimeError("Cannot upload audio: no authenticated user.")
+        remote_path = f"{self.current_user.id}/{folder}/{remote_filename}"
 
         if isinstance(audio_data, str):
             if not os.path.exists(audio_data):
@@ -229,7 +229,7 @@ class SupabaseManager:
             file_bytes = buffer.read()
         elif hasattr(audio_data, "detach"):
             audio_arr = audio_data.detach().cpu().numpy().squeeze()
-            return self.upload_audio(audio_arr, remote_filename, pid, folder, sample_rate)
+            return self.upload_audio(audio_arr, remote_filename, folder, sample_rate)
         else:
             raise TypeError (
                 f"Unsupported audio type: {type(audio_data)}"
@@ -244,9 +244,7 @@ class SupabaseManager:
         except Exception as e:
             print(f"[!] Storage upload notice: {e}")
 
-        public_url = self.client.storage.from_(self.bucket_name).get_public_url(remote_path)
-
-        return public_url
+        return remote_path
 
     def start_therapy_session(self, patient_id: Optional[str] = None) -> str:
 
@@ -291,7 +289,6 @@ class SupabaseManager:
             raw_url = self.upload_audio(
                 audio_data = raw_audio,
                 remote_filename=f"raw_{timestamp}.wav",
-                patient_id = pid,
                 folder="raw",
             )
 
@@ -300,7 +297,6 @@ class SupabaseManager:
             restored_url = self.upload_audio(
                 audio_data=restored_audio,
                 remote_filename=f"restored_{timestamp}.wav",
-                patient_id=pid,
                 folder="restored",
             )
 

@@ -17,6 +17,7 @@ import time
 import json
 import base64
 import tempfile
+import threading
 import asyncio
 from typing import Optional, Dict, Any, List
 
@@ -54,6 +55,7 @@ app.add_middleware(
 _asr_engine = None
 _repair_engine = None
 _restoration_engine = None
+_ASR_LOAD_LOCK = threading.Lock()
 
 
 def get_repair_engine():
@@ -93,14 +95,15 @@ def get_restoration_engine():
 
 def get_asr_engine():
     global _asr_engine
-    if _asr_engine is None:
-        try:
-            from speech_recognizer import DysarthriaSpeechRecognizer
-            _asr_engine = DysarthriaSpeechRecognizer()
-            print("[+] DysarthriaSpeechRecognizer loaded successfully.")
-        except Exception as e:
-            raise HTTPException(status_code=503, detail=f"Speech recognizer unavailable: {e}")
-    return _asr_engine
+    with _ASR_LOAD_LOCK:
+        if _asr_engine is None:
+            try:
+                from speech_recognizer import DysarthriaSpeechRecognizer
+                _asr_engine = DysarthriaSpeechRecognizer()
+                print("[+] DysarthriaSpeechRecognizer loaded successfully.")
+            except Exception as e:
+                raise HTTPException(status_code=503, detail=f"Speech recognizer unavailable: {e}")
+        return _asr_engine
 
 
 # ---------------------------------------------------------------------------
@@ -268,13 +271,13 @@ async def rectify_speech(
     if not raw_bytes:
         raise HTTPException(status_code=400, detail="Missing audio payload. Provide audio file or audio_base64.")
 
-    audio = decode_audio_bytes(raw_bytes, target_sr=16000)
+    audio = await asyncio.to_thread(decode_audio_bytes, raw_bytes, target_sr=16000)
     if len(audio) < 1600:
         raise HTTPException(status_code=400, detail="Audio sample too short (<100ms).")
 
     # 1. Transcribe using Dysarthria ASR
-    asr = get_asr_engine()
-    asr_res = asr.transcribe(audio, sample_rate=16000)
+    asr = await asyncio.to_thread(get_asr_engine)
+    asr_res = await asyncio.to_thread(asr.transcribe, audio, sample_rate=16000)
     raw_transcript = asr_res.get("text", "")
     asr_latency = asr_res.get("latency_ms", 0.0)
 
@@ -293,7 +296,7 @@ async def rectify_speech(
         pitch = f"{pitch_hz:+d}Hz"
         rate = f"{rate_pct:+d}%"
         
-        restoration_eng = get_restoration_engine()
+        restoration_eng = await asyncio.to_thread(get_restoration_engine)
         voice_id = restoration_eng.voice_palette.get(template, "en-US-GuyNeural") if restoration_eng else "en-US-GuyNeural"
 
         synth_res = await synthesize_neural_async(
@@ -310,7 +313,7 @@ async def rectify_speech(
     # 4. Fast Clinical Telemetry
     try:
         from biomarker_engine import compute_articulation_velocity
-        telemetry = compute_articulation_velocity(audio, sample_rate=16000)
+        telemetry = await asyncio.to_thread(compute_articulation_velocity, audio, sample_rate=16000)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Biomarker engine unavailable: {e}")
 
@@ -338,7 +341,7 @@ async def extract_clinical_biomarkers(file: UploadFile = File(...)):
     Used for SLP longitudinal tracking and patient practice monitoring.
     """
     raw_bytes = await file.read()
-    audio = decode_audio_bytes(raw_bytes, target_sr=16000)
+    audio = await asyncio.to_thread(decode_audio_bytes, raw_bytes, target_sr=16000)
 
     results = {}
     try:
@@ -347,9 +350,9 @@ async def extract_clinical_biomarkers(file: UploadFile = File(...)):
             compute_phonatory_instability,
             compute_formant_centralization,
         )
-        results["velocity"] = compute_articulation_velocity(audio, sample_rate=16000)
-        results["instability"] = compute_phonatory_instability(audio, sample_rate=16000)
-        results["formant_compression"] = compute_formant_centralization(audio, sample_rate=16000)
+        results["velocity"] = await asyncio.to_thread(compute_articulation_velocity, audio, sample_rate=16000)
+        results["instability"] = await asyncio.to_thread(compute_phonatory_instability, audio, sample_rate=16000)
+        results["formant_compression"] = await asyncio.to_thread(compute_formant_centralization, audio, sample_rate=16000)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Biomarker engine unavailable: {e}")
 
@@ -361,7 +364,7 @@ async def sculpt_voice_timbre(request: VoiceSculptRequest):
     """
     Voice Identity Studio: Real-time preview of sculpted voice parameters.
     """
-    restoration_eng = get_restoration_engine()
+    restoration_eng = await asyncio.to_thread(get_restoration_engine)
     if not restoration_eng:
         raise HTTPException(status_code=500, detail="Voice restoration engine unavailable.")
 
@@ -398,7 +401,7 @@ async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
     if len(files) < 2:
         raise HTTPException(status_code=400, detail="Please upload at least 2 clean voice notes.")
 
-    restoration_eng = get_restoration_engine()
+    restoration_eng = await asyncio.to_thread(get_restoration_engine)
     temp_paths = []
     try:
         for idx, f in enumerate(files):
@@ -407,7 +410,7 @@ async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
                 buffer.write(await f.read())
             temp_paths.append(tmp_path)
 
-        profile = restoration_eng.create_profile_from_voice_notes(temp_paths, min_notes=2)
+        profile = await asyncio.to_thread(restoration_eng.create_profile_from_voice_notes, temp_paths, min_notes=2)
         return {
             "success": True,
             "profile": profile,
@@ -543,8 +546,8 @@ async def websocket_speech_rectifier(websocket: WebSocket):
 
                 start_rectify = time.time()
 
-                asr = get_asr_engine()
-                asr_res = asr.transcribe(utterance_audio, sample_rate=16000)
+                asr = await asyncio.to_thread(get_asr_engine)
+                asr_res = await asyncio.to_thread(asr.transcribe, utterance_audio, sample_rate=16000)
                 raw_text = asr_res.get("text", "")
 
                 repair = get_repair_engine()

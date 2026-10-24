@@ -59,19 +59,7 @@ else:
 
 print("\n[+] Testing Clinical PDF Report Generation via API ...")
 pdf_resp = requests.post("http://localhost:8000/api/session/report/pdf", json={
-    "session_id": "EPK-TEST-001",
-    "patient_name": "Test Patient",
-    "patient_id": "PT-TEST-001",
-    "condition": "Test condition",
-    "clinician": "Test Clinician",
-    "biomarkers": {
-        "articulation_velocity": 3.4, "speaking_rate": 2.2, "pause_ratio": 0.3,
-        "vocal_jitter_pct": 1.5, "vocal_shimmer_pct": 3.5, "mean_f0_hz": 140.0,
-        "stability_index": 90.0, "formant_compression_index": None,
-        "mean_f1": None, "mean_f2": None, "f1_dispersion": None, "f2_dispersion": None,
-    },
-    "utterances": [{"original_text": "a a test", "repaired_text": "A test.", "latency_ms": 50.0}],
-    "slp_assessment": {"impression": "Test.", "home_plan": "Test.", "frequency": "Test."},
+    "session_id": os.environ["API_TEST_SESSION_ID"],  # a session the test user owns (e.g. from test_supabase_e2e)
     "inline": True
 }, headers=HEADERS)
 print(f"PDF POST Status Code: {pdf_resp.status_code}")

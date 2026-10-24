@@ -34,27 +34,18 @@ class SupabaseManager:
 
         print(f"[+] SupabaseManager initialized for: {self.url}")
 
-    def sign_up(self, email:str,
-                password: str,
-                full_name: str,
-                condition_type: str = "General Dysarthria",) -> Dict[str, Any]:
+    def sign_up(self, email:str, password: str) -> Dict[str, Any]:
 
         email = email.strip().lower()
-        if len(password) < 6:
+        if len(password) < 12:
             raise ValueError (
-                "Password must be at least 6 characters long. "
+                "Password must be at least 12 characters long. "
             )
 
         response =self.client.auth.sign_up(
             {
                 "email": email,
                 "password": password,
-                "options": {
-                    "data": {
-                        "full_name": full_name.strip(),
-                        "condition_type": condition_type.strip(),
-                    }
-                },
             }
         )
 
@@ -64,7 +55,7 @@ class SupabaseManager:
         self.current_user = response.user
         self.current_profile = self.get_profile(refresh=True) if response.session else None
 
-        print(f"[+] Patient registered successfully: {email} (ID: {response.user.id})")
+        print("[+] Patient registered successfully.")
         return {"user": self.current_user, "profile": self.current_profile}
 
     def sign_in(self, email: str, password: str) -> Dict[str, Any]:
@@ -81,12 +72,9 @@ class SupabaseManager:
             )
 
         self.current_user = response.user
-        self.current_profile = self._fetch_or_create_profile(
-            user_id = response.user.id,
-            email = email,
-        )
+        self.current_profile = self._fetch_or_create_profile(user_id = response.user.id)
 
-        print(f"[+] Patient Logged in: {email} (ID: {self.current_profile.get('id')})")
+        print("[+] Patient logged in.")
         return {"user": self.current_user, "profile": self.current_profile}
 
     def sign_out(self) -> None:
@@ -103,9 +91,6 @@ class SupabaseManager:
     def _fetch_or_create_profile(
             self,
             user_id: str,
-            email: str,
-            full_name: str = "Patient",
-            condition_type: str = "General Dysarthria",
     ) -> Dict[str,Any]:
 
         res = (
@@ -120,9 +105,6 @@ class SupabaseManager:
 
         insert_data = {
             "user_id": user_id,
-            "email": email,
-            "full_name": full_name,
-            "condition_type": condition_type,
             "voice_profile": {},
             "phonetic_corrections": {},
         }
@@ -146,6 +128,21 @@ class SupabaseManager:
 
         return self.current_profile
 
+    def set_audio_consent(self, granted: bool) -> None:
+        """Audio uploads are blocked by storage RLS until this is True."""
+        if not self.current_profile:
+            raise RuntimeError("No authenticated patient profile active.")
+        res = (
+            self.client.table("patient_profiles")
+            .update({"consent_audio_storage": granted,
+                     "consent_updated_at": datetime.now().astimezone().isoformat()})
+            .eq("id", self.current_profile["id"])
+            .execute()
+        )
+        if not res.data:
+            raise RuntimeError("Consent update was not saved.")
+        self.current_profile.update(res.data[0])
+
     def update_voice_profile(self, voice_palette: Dict[str, Any]) -> Dict[str, Any]:
 
         if not self.current_profile:
@@ -163,33 +160,9 @@ class SupabaseManager:
 
         if res.data:
             self.current_profile["voice_profile"] = voice_palette
-            print(f"[+] Voice profile updated for patient {patient_id}")
+            print("[+] Voice profile updated.")
             return res.data[0]
         
-        return self.current_profile
-
-    def update_phonetic_corrections(self, corrections: Dict[str, str]) -> Dict[str, Any]:
-
-        if not self.current_profile:
-            raise RuntimeError (
-                "No authenticated patient profile active"
-            )
-
-        patient_id =self.current_profile["id"]
-
-        current = self.current_profile.get("phonetic_corrections") or {}
-        current.update(corrections)
-
-        res = (
-            self.client.table("patient_profiles")
-            .update({"phonetic_corrections": current})
-            .eq("id", patient_id)
-            .execute()
-        )
-        if res.data:
-            self.current_profile["phonetic_corrections"] = current
-            print(f"[+] Phonetic Corrections updated for patient {patient_id}")
-            return res.data[0]
         return self.current_profile
 
     def upload_audio(self, audio_data: Union[np.ndarray, bytes, str],
@@ -306,30 +279,6 @@ class SupabaseManager:
 
         res = self.client.table("session_utterances").insert(utterance_record).execute()
         return res.data[0] if res.data else utterance_record
-
-    def log_biomarkers(self,
-                       session_id: str,
-                       biomarkers: Dict[str, Any],
-                       patient_id: Optional[str] = None,
-                       ) -> Dict[str, Any]:
-
-        pid = patient_id or (self.current_profile["id"] if self.current_profile else None)
-        record = {
-            "session_id": session_id,
-            "patient_id": pid,
-            "articulation_velocity": round(float(biomarkers.get("articulation_velocity", 0.0)), 2),
-            "speaking_rate": round(float(biomarkers.get("speaking_rate", 0.0)),2),
-            "pause_ratio": round(float(biomarkers.get("pause_ratio", 0.0)),3),
-            "formant_compression_index": None if biomarkers.get("formant_compression_index") is None else round(float(biomarkers["formant_compression_index"]), 3),
-            "vocal_jitter_pct": round(float(biomarkers.get("vocal_jitter_pct") or biomarkers.get("jitter_percent", 0.0)), 2),
-            "vocal_shimmer_pct":  round(float(biomarkers.get("vocal_shimmer_pct") or biomarkers.get("shimmer_percent", 0.0)), 2),
-            "mean_f0_hz": round(float(biomarkers.get("mean_f0_hz") or biomarkers.get("mean_f0", 0.0)),2),
-            "attention_entropy": round(float(biomarkers.get("attention_entropy", 0.0)),4),
-            "metrics": biomarkers,
-        }
-
-        res = self.client.table("biomarker_logs").insert(record).execute()
-        return res.data[0] if res.data else record
 
     def finish_therapy_session(
             self,

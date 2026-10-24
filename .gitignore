@@ -13,3 +13,4 @@ exp/
 logs/
 .env
 .DS_Store
+models/

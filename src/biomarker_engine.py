@@ -220,6 +220,15 @@ def compute_attention_entropy(audio, model=None, sample_rate=16000):
         "phonetic_uncertainty": float(np.clip(mean_entropy, 0.0, 1.0))
     }
 
+def compute_composite_score(articulation, phonatory, formants):
+    """Speech Gym composite (0-100, higher = healthier); hand-set weights, not clinically validated."""
+    score = 100.0
+    score -= min(30.0, phonatory["jitter_percent"] * 3.0)   # High jitter penalty
+    score -= min(25.0, articulation["pause_ratio"] * 35.0)  # Pause struggle penalty
+    if formants["formant_compression_index"] is not None:
+        score -= min(25.0, formants["formant_compression_index"] * 0.05) # Vowel collapse penalty
+    return float(np.clip(score, 10.0, 100.0))
+
 def extract_speech_gym_biomarkers(audio, sample_rate=16000, model=None):
    
     articulation = compute_articulation_velocity(audio, sample_rate=sample_rate)
@@ -227,14 +236,7 @@ def extract_speech_gym_biomarkers(audio, sample_rate=16000, model=None):
     formants = compute_formant_centralization(audio, sample_rate=sample_rate)
     attention = compute_attention_entropy(audio, model=model, sample_rate=sample_rate)
 
-    # Calculate an overall Speech Gym Composite Score (0 to 100 scale)
-    # Higher = healthier voice; Lower = severe motor impairment
-    score = 100.0
-    score -= min(30.0, phonatory["jitter_percent"] * 3.0)   # High jitter penalty
-    score -= min(25.0, articulation["pause_ratio"] * 35.0)  # Pause struggle penalty
-    if formants["formant_compression_index"] is not None:
-        score -= min(25.0, formants["formant_compression_index"] * 0.05) # Vowel collapse penalty
-    composite_score = float(np.clip(score, 10.0, 100.0))
+    composite_score = compute_composite_score(articulation, phonatory, formants)
 
     return {
         "composite_score": composite_score,

@@ -26,17 +26,15 @@ def run_e2e_test():
     print("  SUPABASE CLOUD PIPELINE: LIVE END-TO-END VERIFICATION")
     print("=" * 65)
 
-    # 1. Initialize SupabaseManager (using service role for automated test execution)
+    # 1. Initialize SupabaseManager (anon key, so RLS applies)
     print("\n[Step 1] Initializing SupabaseManager...")
-    mgr = SupabaseManager(use_service_role=True)
+    mgr = SupabaseManager()  # anon key: exercises RLS like a real client
     print(" [+] Gateway successfully connected to Supabase.")
 
     # 2. Test Patient Profile Setup
     print("\n[Step 2] Testing Patient Registration / Authentication...")
     test_email = "clinical_test_patient@voiceai.org"
     test_password = os.environ.get("SUPABASE_TEST_PASSWORD") or sys.exit("Set SUPABASE_TEST_PASSWORD to the test patient password.")
-    test_name = "Eleanor Vance (Test)"
-    test_condition = "Cerebral Palsy (Ataxic Dysarthria)"
 
     try:
         auth_res = mgr.sign_in(email=test_email, password=test_password)
@@ -46,15 +44,12 @@ def run_e2e_test():
         auth_res = mgr.sign_up(
             email=test_email,
             password=test_password,
-            full_name=test_name,
-            condition_type=test_condition,
         )
         print(f" [+] Registered new test patient: {test_email}")
 
     patient_id = mgr.current_profile["id"]
     print(f" [+] Active Patient ID: {patient_id}")
-    print(f" [+] Active Patient Name: {mgr.current_profile['full_name']}")
-    print(f" [+] Clinical Condition: {mgr.current_profile['condition_type']}")
+    mgr.set_audio_consent(True)
 
     # 3. Voice Profile & Personalization
     print("\n[Step 3] Updating Voice Palette & Phonetic Memory...")
@@ -68,10 +63,6 @@ def run_e2e_test():
     }
     mgr.update_voice_profile(mock_voice_palette)
     print(f" [+] Voice profile successfully saved in Supabase.")
-
-    mock_corrections = {"yard less": "yard loss", "he he": "he"}
-    mgr.update_phonetic_corrections(mock_corrections)
-    print(f" [+] Personalized phonetic dictionary saved: {mock_corrections}")
 
     # 4. In-Memory Audio Upload
     print("\n[Step 4] Testing In-Memory Audio Cloud Storage Upload...")
@@ -114,19 +105,16 @@ def run_e2e_test():
     print(f" [+] Utterance logged (ID: {utt['id']}) | Transcribed: '{utt['transcribed_text']}' -> Corrected: '{utt['corrected_text']}'")
 
     # 6. Biomarker Telemetry Sync
-    print("\n[Step 6] Syncing Objective Bio-Acoustic Telemetry...")
-    mock_biomarkers = {
-        "articulation_velocity": 3.85,
-        "speaking_rate": 2.90,
-        "pause_ratio": 0.245,
-        "formant_compression_index": 1.182,
-        "vocal_jitter_pct": 2.45,
-        "vocal_shimmer_pct": 4.10,
-        "mean_f0_hz": 124.50,
-        "attention_entropy": 0.8124,
-    }
-    bio_res = mgr.log_biomarkers(session_id=session_id, biomarkers=mock_biomarkers)
-    print(f" [+] Biomarkers recorded in PostgreSQL: Jitter: {bio_res['vocal_jitter_pct']}% | Compression idx: {bio_res['formant_compression_index']} | Artic: {bio_res['articulation_velocity']} syl/s")
+    print("\n[Step 6] Checking biomarker_logs is server-write-only...")
+    try:
+        mgr.client.table("biomarker_logs").insert({"session_id": session_id, "patient_id": patient_id,
+                                                   "stability_index": 99}).execute()
+        sys.exit(" [!] FAIL: a client was able to write biomarker_logs")
+    except SystemExit:
+        raise
+    except Exception:
+        print(" [+] Client write to biomarker_logs rejected (server-only table), as intended.")
+    print(f" [+] Session ID (for API_TEST_SESSION_ID): {session_id}")
 
     # 7. Finalize Session
     print("\n[Step 7] Finalizing Therapy Session Summary...")

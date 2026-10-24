@@ -18,10 +18,6 @@ class IntentRepair:
 
     def __init__(self, feedback_engine=None):
         self.feedback_engine = feedback_engine
-        if self.feedback_engine:
-            self.corrections = self.feedback_engine.stats.get("common_corrections", {})
-        else:
-            self.corrections = {}
 
     def clean_dysfluencies(self, text: str) -> str:
         """
@@ -44,12 +40,7 @@ class IntentRepair:
 
         # Tier 2: Apply patient-specific memory from FeedbackEngine
         if self.feedback_engine:
-            self.corrections = self.feedback_engine.stats.get("common_corrections", {})
-            for key in self.corrections:
-                if "->" in key:
-                    mistake, true_word = [part.strip() for part in key.split("->")]
-                    if mistake.lower() in text.lower():
-                        text = re.sub(rf'\b{re.escape(mistake)}\b', true_word, text, flags=re.IGNORECASE)
+            text = self.feedback_engine.apply(text)
 
         # Tier 3: Capitalize first letter and ensure ending punctuation
         if text:
@@ -83,7 +74,7 @@ if __name__ == "__main__":
     print(f"    Latency  : {res1['latency_ms']:.2f} ms")
 
     # 2. Test WITH Patient Memory (FeedbackEngine attached)
-    fb_engine = FeedbackEngine(patient_id="test_patient_001")
+    fb_engine = FeedbackEngine({"less": {"to": "loss", "ok": 2, "bad": 0}})
     personalized_repair = IntentRepair(feedback_engine=fb_engine)
     res2 = personalized_repair.repair(raw_stutter)
 

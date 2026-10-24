@@ -17,18 +17,21 @@ import time
 import json
 import base64
 import tempfile
+import shutil
+from datetime import datetime, timezone
 import threading
 import asyncio
 from typing import Optional, Dict, Any, List
+from uuid import UUID
 
 import numpy as np
 import librosa
 import soundfile as sf
-import edge_tts
+import local_tts
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException, Request, Response, Header, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Request, Response, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -61,23 +64,29 @@ _restoration_engine = None
 _ASR_LOAD_LOCK = threading.Lock()
 
 
-def get_repair_engine(patient_id):
+@app.on_event("startup")
+def warm_voices():
+    """Loading a voice takes ~10 s and the first pitch shift ~3 s; do it before a patient is waiting."""
+    def run():
+        from voice_restoration import VoiceRestorationEngine
+        names = dict.fromkeys([local_tts.DEFAULT_VOICE, *VoiceRestorationEngine().voice_palette.values()])
+        for i, name in enumerate(names):
+            try:
+                local_tts.synthesize("Ready.", name, pitch="+1Hz" if i == 0 else "+0Hz")
+            except Exception as e:
+                print(f"[!] Voice warm-up failed for {name}: {e}")
+    threading.Thread(target=run, daemon=True).start()
+
+
+def get_repair_engine(token, user_id):
+    """Repair engine seeded with this patient's learned corrections (read under their own JWT)."""
     try:
         from feedback_engine import FeedbackEngine
         from intent_repair import IntentRepair
-        return IntentRepair(feedback_engine=FeedbackEngine(patient_id=patient_id))
+        rows = user_client(token).table("patient_profiles").select("phonetic_corrections").eq("user_id", user_id).execute().data
+        return IntentRepair(feedback_engine=FeedbackEngine((rows[0]["phonetic_corrections"] if rows else None) or {}))
     except Exception as e:
-        print(f"[!] Warning: Could not load IntentRepair: {e}")
-        class FallbackRepair:
-            def repair(self, text):
-                import re
-                cleaned = re.sub(r'(\w+)(?:\s+)+', r'', text, flags=re.IGNORECASE).strip()
-                if cleaned:
-                    cleaned = cleaned[0].upper() + cleaned[1:]
-                    if cleaned[-1] not in ".!?":
-                        cleaned += "."
-                return {"original_text": text, "repaired_text": cleaned, "latency_ms": 2.0}
-        return FallbackRepair()
+        raise HTTPException(status_code=503, detail=f"Repair engine unavailable: {e}")
 
 
 def get_restoration_engine():
@@ -119,6 +128,23 @@ def verify_token(token: str):
     if not res or not res.user:
         raise HTTPException(status_code=401, detail="Invalid or missing token")
     return res.user
+
+
+def user_client(token: str):
+    """Supabase client acting as the caller, so RLS applies to every query."""
+    from supabase_manager import SupabaseManager
+    client = SupabaseManager().client
+    client.postgrest.auth(token)
+    return client
+
+
+def service_client():
+    """Server-only writer for tables clients may not write (biomarker_logs). Never expose this key."""
+    from supabase import create_client
+    url, key = os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    if not url or not key:
+        raise HTTPException(status_code=503, detail="Server write access is not configured.")
+    return create_client(url, key)
 
 
 async def require_user(authorization: Optional[str] = Header(None)):
@@ -165,32 +191,16 @@ def audio_to_base64_wav(audio: np.ndarray, sample_rate: int = 16000) -> str:
 
 async def synthesize_neural_async(
     text: str,
-    voice: str = "en-US-GuyNeural",
+    voice: str = local_tts.DEFAULT_VOICE,
     pitch: str = "+0Hz",
     rate: str = "+0%",
 ) -> Dict[str, Any]:
-    """Async neural voice synthesis with zero event-loop blocking."""
-    start = time.time()
-    communicate = edge_tts.Communicate(text, voice, pitch=pitch, rate=rate)
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        output_path = tmp.name
+    """On-device neural voice synthesis (Piper); the text never leaves this machine."""
     try:
-        await communicate.save(output_path)
-        audio, sr = sf.read(output_path, dtype="float32")
-    finally:
-        os.remove(output_path)
-    if audio.ndim > 1:
-        audio = np.mean(audio, axis=1)
-    if sr != 16000:
-        audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
-        sr = 16000
-    latency_ms = (time.time() - start) * 1000.0
-    return {
-        "audio": audio,
-        "sample_rate": sr,
-        "latency_ms": latency_ms,
-        "duration_sec": len(audio) / sr,
-    }
+        return await asyncio.to_thread(local_tts.synthesize, text, voice, pitch, rate)
+    except FileNotFoundError as e:
+        print(f"[!] {e}")
+        raise HTTPException(status_code=503, detail="Voice model not installed.")
 
 
 # ---------------------------------------------------------------------------
@@ -206,15 +216,8 @@ class VoiceSculptRequest(BaseModel):
 
 
 class ClinicalPdfReportRequest(BaseModel):
-    patient_id: str
-    session_id: Optional[str] = None
-    patient_name: str
-    condition: str
-    clinician: str
-    biomarkers: Dict[str, Any]
-    utterances: List[Dict[str, Any]]
-    slp_assessment: Dict[str, Any]
-    inline: Optional[bool] = True
+    session_id: UUID
+    inline: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +246,7 @@ def health_check():
 async def rectify_speech(
     request: Request,
     file: Optional[UploadFile] = File(None),
+    authorization: str = Header(...),
     user=Depends(require_user),
 ):
     """
@@ -301,7 +305,7 @@ async def rectify_speech(
     asr_latency = asr_res.get("latency_ms", 0.0)
 
     # 2. Intent & Dysfluency Repair
-    repair_eng = get_repair_engine(user.id)
+    repair_eng = await asyncio.to_thread(get_repair_engine, authorization.partition(' ')[2], user.id)
     repair_res = repair_eng.repair(raw_transcript)
     repaired_text = repair_res.get("repaired_text", raw_transcript)
     repair_latency = repair_res.get("latency_ms", 1.0)
@@ -316,7 +320,7 @@ async def rectify_speech(
         rate = f"{rate_pct:+d}%"
         
         restoration_eng = await asyncio.to_thread(get_restoration_engine)
-        voice_id = restoration_eng.voice_palette.get(template, "en-US-GuyNeural") if restoration_eng else "en-US-GuyNeural"
+        voice_id = restoration_eng.voice_palette.get(template, local_tts.DEFAULT_VOICE) if restoration_eng else local_tts.DEFAULT_VOICE
 
         synth_res = await synthesize_neural_async(
             text=repaired_text,
@@ -448,35 +452,219 @@ async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
                     pass
 
 
+class DeleteDataRequest(BaseModel):
+    confirm: str
+
+
+def _purge_audio(writer, uid: str) -> None:
+    """Removes every stored audio object under the user's folder; raises if any remain."""
+    bucket = writer.storage.from_("patient_audio")
+
+    def files_under(prefix):
+        found = []
+        for entry in bucket.list(prefix, {"limit": 1000}):
+            path = f"{prefix}/{entry['name']}"
+            found += files_under(path) if entry.get("id") is None else [path]  # id is None for folders
+        return found
+
+    paths = files_under(uid)
+    if paths:
+        bucket.remove(paths)
+    if files_under(uid):
+        raise RuntimeError("audio objects remain after deletion")
+
+
+@app.delete("/api/me/data")
+def delete_my_data(req: DeleteDataRequest, user=Depends(require_user)):
+    """
+    Permanently erases the caller's account: stored audio, local feedback data, then the auth user,
+    whose deletion cascades to profile, sessions, biomarkers, utterances, grants and link codes.
+    Audio goes first so a failure leaves the account intact and the request can be retried.
+    """
+    if req.confirm != "DELETE":
+        raise HTTPException(status_code=400, detail='Send {"confirm": "DELETE"} to proceed.')
+    uid = str(UUID(str(user.id)))  # also guards the local path below
+    writer = service_client()
+    try:
+        _purge_audio(writer, uid)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Audio deletion failed; nothing else was deleted: {e}")
+    shutil.rmtree(os.path.join("data", "patient_profiles", uid), ignore_errors=True)
+    try:
+        writer.auth.admin.delete_user(uid)
+    except Exception as e:
+        # shortcut: clinicians who authored assessments hit a foreign key here; hand-over flow comes later
+        raise HTTPException(status_code=409, detail=f"Account could not be deleted: {e}")
+    return {"success": True}
+
+
+class UtteranceIn(BaseModel):
+    raw_transcript: str = Field(max_length=1000)
+    shown_text: str = Field(max_length=1000)
+    final_text: str = Field(min_length=1, max_length=1000)
+    latency_ms: float = Field(default=0, ge=0, le=60000)
+
+
+def own_session(client, user_id, session_id: str) -> str:
+    """Returns the caller's patient id if the session is theirs; 404 otherwise."""
+    prof = client.table("patient_profiles").select("id").eq("user_id", user_id).execute().data
+    sess = client.table("therapy_sessions").select("patient_id").eq("id", session_id).execute().data
+    if not (prof and sess and sess[0]["patient_id"] == prof[0]["id"]):
+        raise HTTPException(status_code=404, detail="Session not found.")
+    return prof[0]["id"]
+
+
+@app.post("/api/sessions")
+def start_session(authorization: str = Header(...), user=Depends(require_user)):
+    client = user_client(authorization.partition(" ")[2])
+    prof = client.table("patient_profiles").select("id").eq("user_id", user.id).execute().data
+    if not prof:
+        raise HTTPException(status_code=404, detail="No patient profile.")
+    row = client.table("therapy_sessions").insert({"patient_id": prof[0]["id"]}).execute().data
+    return {"session_id": row[0]["id"]}
+
+
+@app.post("/api/sessions/{session_id}/utterances")
+def save_utterance(session_id: UUID, req: UtteranceIn, authorization: str = Header(...), user=Depends(require_user)):
+    """The patient's yes/no (final_text == shown_text means yes) is stored and teaches their correction table."""
+    from feedback_engine import FeedbackEngine, words
+    client = user_client(authorization.partition(" ")[2])
+    patient_id = own_session(client, user.id, str(session_id))
+    confirmed = words(req.shown_text) == words(req.final_text)
+    table = client.table("patient_profiles").select("phonetic_corrections").eq("id", patient_id).execute().data[0]["phonetic_corrections"] or {}
+    engine = FeedbackEngine(table)
+    reward = engine.learn(req.raw_transcript, req.shown_text, req.final_text)
+    client.table("session_utterances").insert({
+        "session_id": str(session_id), "patient_id": patient_id,
+        "transcribed_text": req.raw_transcript, "corrected_text": req.final_text,
+        "confirmed": confirmed, "latency_ms": req.latency_ms,
+    }).execute()
+    # shortcut: read-modify-write, so two simultaneous saves can lose one lesson; use an RPC if that matters
+    client.table("patient_profiles").update({"phonetic_corrections": engine.table}).eq("id", patient_id).execute()
+    return {"confirmed": confirmed, "reward": round(reward, 3)}
+
+
+@app.post("/api/sessions/{session_id}/finish")
+def finish_session(session_id: UUID, authorization: str = Header(...), user=Depends(require_user)):
+    """Accuracy, count and duration are computed here from stored rows, not taken from the client."""
+    client = user_client(authorization.partition(" ")[2])
+    sid = str(session_id)
+    own_session(client, user.id, sid)
+    started = client.table("therapy_sessions").select("created_at").eq("id", sid).execute().data[0]["created_at"]
+    utts = client.table("session_utterances").select("confirmed").eq("session_id", sid).execute().data
+    accuracy = 100.0 * sum(u["confirmed"] for u in utts) / len(utts) if utts else 0.0
+    duration = (datetime.now(timezone.utc) - datetime.fromisoformat(started)).total_seconds()
+    update = {"duration_seconds": round(duration, 2), "utterances_count": len(utts), "accuracy_rate": round(accuracy, 2)}
+    client.table("therapy_sessions").update(update).eq("id", sid).execute()
+    return update
+
+
+@app.post("/api/session/analyze")
+async def analyze_session_audio(
+    session_id: UUID = Form(...),
+    file: UploadFile = File(...),
+    authorization: str = Header(...),
+    user=Depends(require_user),
+):
+    """Measures biomarkers on the server and stores them; clients cannot write biomarker_logs."""
+    raw_bytes = await file.read(_MAX_UPLOAD_BYTES + 1)
+    if len(raw_bytes) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Upload too large.")
+
+    token = authorization.partition(" ")[2]
+    patient_id = await asyncio.to_thread(lambda: own_session(user_client(token), user.id, str(session_id)))
+    writer = service_client()
+
+    audio = await asyncio.to_thread(decode_audio_bytes, raw_bytes, target_sr=16000)
+    try:
+        from biomarker_engine import (compute_articulation_velocity, compute_phonatory_instability,
+                                      compute_formant_centralization, compute_composite_score)
+        art = await asyncio.to_thread(compute_articulation_velocity, audio, sample_rate=16000)
+        pho = await asyncio.to_thread(compute_phonatory_instability, audio, sample_rate=16000)
+        frm = await asyncio.to_thread(compute_formant_centralization, audio, sample_rate=16000)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Biomarker engine unavailable: {e}")
+
+    voiced = pho["mean_f0"] > 0  # the engine returns 0.0 when too little voiced speech; that is "not measured"
+    record = {
+        "session_id": str(session_id),
+        "patient_id": patient_id,
+        "articulation_velocity": art["articulation_velocity"],
+        "speaking_rate": art["speaking_rate"],
+        "pause_ratio": art["pause_ratio"],
+        "formant_compression_index": frm["formant_compression_index"],
+        "vocal_jitter_pct": pho["jitter_percent"] if voiced else None,
+        "vocal_shimmer_pct": pho["shimmer_percent"] if voiced else None,
+        "mean_f0_hz": pho["mean_f0"] if voiced else None,
+        "stability_index": compute_composite_score(art, pho, frm) if voiced else None,
+        "metrics": {"articulation": art, "phonatory_instability": pho, "vowel_space": frm},
+    }
+    try:
+        saved = await asyncio.to_thread(lambda: writer.table("biomarker_logs").insert(record).execute().data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not store biomarkers: {e}")
+    return {"success": True, "biomarkers": saved[0] if saved else record}
+
+
 # ---------------------------------------------------------------------------
 # Clinical PDF Evaluation Report Generator (SLP / Insurance CPT Reimbursement)
 # ---------------------------------------------------------------------------
-@app.post("/api/session/report/pdf", dependencies=[Depends(require_user)])
-def create_clinical_pdf_report(req: ClinicalPdfReportRequest):
+@app.post("/api/session/report/pdf")
+def create_clinical_pdf_report(
+    req: ClinicalPdfReportRequest,
+    authorization: str = Header(...),
+    user=Depends(require_user),
+):
     """
-    Generates an authoritative, 1-page publication-grade Clinical SLP Evaluation Report PDF.
-    Returns binary application/pdf stream with inline or attachment disposition.
+    Everything in the report comes from the database under the caller's JWT (RLS applies):
+    server-measured biomarkers, stored utterances and the assessment written by a verified,
+    patient-authorised clinician. Nothing clinical is accepted from the request body.
     """
     try:
         from pdf_generator import generate_clinical_pdf
     except ImportError:
         from src.pdf_generator import generate_clinical_pdf
 
-    session_id = req.session_id or f"EPK-{int(time.time()) % 1000000:06d}"
+    session_id = str(req.session_id)
+    client = user_client(authorization.partition(" ")[2])
+    sessions = client.table("therapy_sessions").select("patient_id").eq("id", session_id).execute().data
+    if not sessions:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    assessments = client.table("clinical_assessments").select("*").eq("session_id", session_id).order("updated_at", desc=True).limit(1).execute().data
+    if not assessments:
+        raise HTTPException(status_code=422, detail="No clinician assessment exists for this session.")
+    assessment = assessments[0]
+    clinicians = client.table("clinicians").select("display_name").eq("user_id", assessment["clinician_id"]).execute().data
+    if not clinicians:
+        raise HTTPException(status_code=422, detail="Assessing clinician is not visible to you.")
+    bios = client.table("biomarker_logs").select("*").eq("session_id", session_id).order("created_at", desc=True).limit(1).execute().data
+    if not bios:
+        raise HTTPException(status_code=422, detail="Session has no biomarkers.")
+    utts = client.table("session_utterances").select("*").eq("session_id", session_id).order("created_at").execute().data
+    row = bios[0]
+    biomarkers = {k: row.get(k) for k in (
+        "articulation_velocity", "speaking_rate", "pause_ratio", "formant_compression_index",
+        "vocal_jitter_pct", "vocal_shimmer_pct", "mean_f0_hz", "stability_index")}
+    missing = [k for k, v in biomarkers.items() if v is None and k != "formant_compression_index"]
+    if missing:
+        raise HTTPException(status_code=422, detail=f"Session lacks measured values: {missing}")
 
     report_data = {
         "session_id": session_id,
         "evaluation_date": time.strftime("%B %d, %Y"),
         "clinic_name": "Epako Bio-Acoustic Speech Sanctuary",
         "patient": {
-            "name": req.patient_name,
-            "id": req.patient_id,
-            "condition": req.condition,
-            "clinician": req.clinician,
+            "name": "De-identified",
+            "id": sessions[0]["patient_id"],
+            "condition": assessment["condition"],
+            "clinician": clinicians[0]["display_name"],
         },
-        "biomarkers": req.biomarkers,
-        "utterances": req.utterances,
-        "slp_assessment": req.slp_assessment,
+        "biomarkers": biomarkers,
+        "utterances": [
+            {"original_text": u["transcribed_text"], "repaired_text": u["corrected_text"] or u["transcribed_text"],
+             "latency_ms": float(u["latency_ms"] or 0)}
+            for u in utts],
+        "slp_assessment": {k: assessment[k] for k in ("impression", "home_plan", "frequency")},
     }
 
     try:
@@ -587,11 +775,11 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                 asr_res = await asyncio.to_thread(asr.transcribe, utterance_audio, sample_rate=16000)
                 raw_text = asr_res.get("text", "")
 
-                repair = get_repair_engine(user.id)
+                repair = await asyncio.to_thread(get_repair_engine, auth_msg['token'], user.id)
                 repaired = repair.repair(raw_text).get("repaired_text", raw_text)
 
                 if repaired:
-                    synth = await synthesize_neural_async(repaired, voice="en-US-GuyNeural")
+                    synth = await synthesize_neural_async(repaired)
                     audio_b64 = audio_to_base64_wav(synth["audio"], 16000)
                 else:
                     audio_b64 = audio_to_base64_wav(utterance_audio, 16000)

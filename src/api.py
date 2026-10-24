@@ -521,8 +521,8 @@ async def websocket_speech_rectifier(websocket: WebSocket):
     await websocket.accept()
     try:
         auth_msg = json.loads(await asyncio.wait_for(websocket.receive_text(), timeout=10))
-        if auth_msg.get("type") != "auth":
-            raise ValueError("first message must be auth")
+        if auth_msg.get("type") != "auth" or auth_msg.get("sample_rate") != 16000 or auth_msg.get("encoding") != "pcm_s16le":
+            raise ValueError("first message must be auth with sample_rate 16000 and encoding pcm_s16le")
         await asyncio.to_thread(verify_token, auth_msg.get("token") or "")
     except Exception:
         try:
@@ -532,7 +532,9 @@ async def websocket_speech_rectifier(websocket: WebSocket):
         return
     print("[+] WebSocket client connected to /ws/rectify")
 
-    audio_buffer = []
+    max_buffer = 30 * 16000
+    audio_buffer = np.zeros(max_buffer, dtype=np.float32)
+    buffered = 0
     is_speaking = False
     silence_frames = 0
     silence_threshold = 0.015
@@ -570,24 +572,25 @@ async def websocket_speech_rectifier(websocket: WebSocket):
             if rms > silence_threshold:
                 is_speaking = True
                 silence_frames = 0
-                audio_buffer.extend(chunk)
-            else:
-                if is_speaking:
-                    silence_frames += 1
-                    audio_buffer.extend(chunk)
+            elif is_speaking:
+                silence_frames += 1
+            if is_speaking:
+                n = min(len(chunk), max_buffer - buffered)
+                audio_buffer[buffered:buffered + n] = chunk[:n]
+                buffered += n
 
             # Send immediate live telemetry back to animate frontend oscilloscope
             await websocket.send_json({
                 "type": "telemetry",
                 "rms": round(rms, 4),
                 "is_speaking": is_speaking,
-                "buffer_len": len(audio_buffer),
+                "buffer_len": buffered,
             })
 
             # When speech ends, run rectification
-            if is_speaking and silence_frames >= max_silence_frames and len(audio_buffer) >= (min_speech_frames * len(chunk)):
-                utterance_audio = np.array(audio_buffer, dtype=np.float32)
-                audio_buffer = []
+            if is_speaking and (buffered >= max_buffer or (silence_frames >= max_silence_frames and buffered >= (min_speech_frames * len(chunk)))):
+                utterance_audio = audio_buffer[:buffered].copy()
+                buffered = 0
                 is_speaking = False
                 silence_frames = 0
 

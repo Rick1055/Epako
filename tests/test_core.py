@@ -1,4 +1,5 @@
 import sys
+import uuid
 from pathlib import Path
 from unittest import mock
 
@@ -342,3 +343,150 @@ def test_password_accounts_cannot_skip_the_password():
     finally:
         api.app.dependency_overrides.clear()
     assert r.status_code == 403   # a fresh token alone is not enough when the account has a password
+
+
+def test_no_undefined_names_in_project_code():
+    """Catches the NameError class of bug (a missing import) in code no test executes, e.g. run_benchmark.py."""
+    check = pytest.importorskip("pyflakes.api").check
+    from pyflakes.reporter import Reporter
+    import io
+    files = [*ROOT.glob("src/*.py"), *ROOT.glob("tests/*.py"), *ROOT.glob("scripts/*.py"), ROOT / "run_benchmark.py", ROOT / "test_api_e2e.py"]
+    problems = []
+    for f in files:
+        out = io.StringIO()
+        check(f.read_text(encoding="utf-8"), f.name, Reporter(out, out))
+        problems += [line for line in out.getvalue().splitlines() if "undefined name" in line]
+    assert not problems, problems
+
+
+USER, MINE, THEIRS = "user-1", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+
+class _FakeDb:
+    """In-memory stand-in for a Supabase client that records which tables it wrote."""
+
+    def __init__(self, tables):
+        self.tables, self.writes = tables, []
+
+    def table(self, name):
+        return _FakeQuery(self, name)
+
+    def rpc(self, fn, params):
+        return mock.Mock(execute=lambda: mock.Mock(data=True))  # the rate limiter always allows
+
+
+class _FakeQuery:
+    def __init__(self, db, name):
+        self.db, self.name, self.filters, self.op, self.payload = db, name, [], "select", None
+
+    def select(self, *_):
+        return self
+
+    def eq(self, col, val):
+        self.filters.append((col, val))
+        return self
+
+    def order(self, *_, **__):
+        return self
+
+    def limit(self, _):
+        return self
+
+    def insert(self, row):
+        self.op, self.payload = "insert", row
+        return self
+
+    def update(self, row):
+        self.op, self.payload = "update", row
+        return self
+
+    def execute(self):
+        rows = self.db.tables[self.name]
+        matched = [r for r in rows if all(r.get(c) == v for c, v in self.filters)]
+        if self.op == "insert":
+            row = {"id": str(uuid.uuid4()), "created_at": "2026-10-24T10:00:00+00:00", **self.payload}
+            rows.append(row)
+            self.db.writes.append(self.name)
+            return mock.Mock(data=[row])
+        if self.op == "update":
+            for r in matched:
+                r.update(self.payload)
+            self.db.writes.append(self.name)
+            return mock.Mock(data=matched)
+        return mock.Mock(data=[dict(r) for r in matched])
+
+
+def _session_world():
+    tables = {
+        "patient_profiles": [{"id": "p1", "user_id": USER, "phonetic_corrections": {}}],
+        "therapy_sessions": [{"id": MINE, "patient_id": "p1", "created_at": "2026-10-24T10:00:00+00:00"},
+                             {"id": THEIRS, "patient_id": "p2", "created_at": "2026-10-24T10:00:00+00:00"}],
+        "session_utterances": [],
+        "biomarker_logs": [],
+    }
+    return tables, _FakeDb(tables), _FakeDb(tables)
+
+
+def test_session_routes_write_scores_with_the_server_key_only():
+    from fastapi.testclient import TestClient
+    import api
+    tables, user_db, server_db = _session_world()
+    _as(USER)
+    say = lambda c, shown, final, raw="wun cat": c.post(f"/api/sessions/{MINE}/utterances", headers=AUTH,
+                                                         json={"raw_transcript": raw, "shown_text": shown, "final_text": final})
+    try:
+        with mock.patch.object(api, "user_client", return_value=user_db), mock.patch.object(api, "service_client", return_value=server_db):
+            c = TestClient(api.app)
+            started = c.post("/api/sessions", headers=AUTH)
+            foreign = c.post(f"/api/sessions/{THEIRS}/utterances", headers=AUTH, json={"raw_transcript": "a", "shown_text": "a", "final_text": "a"})
+            no = say(c, "wun cat.", "one cat")
+            say(c, "wun cat.", "one cat")
+            yes = say(c, "One cat.", "one cat", raw="one cat")
+            done = c.post(f"/api/sessions/{MINE}/finish", headers=AUTH)
+    finally:
+        api.app.dependency_overrides.clear()
+    assert started.status_code == 200 and foreign.status_code == 404
+    assert no.json() == {"confirmed": False, "reward": 0.5} and yes.json() == {"confirmed": True, "reward": 1.0}
+    assert tables["patient_profiles"][0]["phonetic_corrections"]["wun"] == {"to": "one", "ok": 2, "bad": 0}
+    assert done.json()["utterances_count"] == 3 and done.json()["accuracy_rate"] == pytest.approx(33.33, abs=0.01)
+    assert set(user_db.writes) == {"patient_profiles"}                           # the patient's own client never writes scores
+    assert set(server_db.writes) == {"therapy_sessions", "session_utterances"}   # only the server key does
+
+
+def test_analyze_stores_biomarkers_with_the_server_key_for_own_sessions_only():
+    import io
+    import soundfile as sf
+    from fastapi.testclient import TestClient
+    import api
+    tables, user_db, server_db = _session_world()
+    t = np.arange(16000 * 2) / 16000
+    wav = io.BytesIO()
+    sf.write(wav, (0.3 * np.sin(2 * np.pi * 140 * t)).astype("float32"), 16000, format="WAV")
+    _as(USER)
+    send = lambda c, sid: c.post("/api/session/analyze", headers=AUTH, data={"session_id": sid}, files={"file": ("a.wav", wav.getvalue(), "audio/wav")})
+    try:
+        with mock.patch.object(api, "user_client", return_value=user_db), mock.patch.object(api, "service_client", return_value=server_db):
+            c = TestClient(api.app)
+            mine, theirs = send(c, MINE), send(c, THEIRS)
+    finally:
+        api.app.dependency_overrides.clear()
+    assert mine.status_code == 200 and theirs.status_code == 404
+    assert [r["patient_id"] for r in tables["biomarker_logs"]] == ["p1"]
+    assert user_db.writes == [] and server_db.writes == ["biomarker_logs"]
+
+
+def test_websocket_rechecks_the_token_after_five_minutes():
+    import json
+    import time as real_time
+    from fastapi.testclient import TestClient
+    from starlette.websockets import WebSocketDisconnect
+    import api
+    verify = mock.Mock(side_effect=[mock.Mock(id="ws-user-2"), api.HTTPException(status_code=401)])  # valid at connect, revoked later
+    with mock.patch.object(api, "verify_token", verify), mock.patch.object(api, "time", wraps=real_time) as clock:
+        clock.monotonic.side_effect = [0.0] + [1000.0] * 50
+        with TestClient(api.app).websocket_connect("/ws/rectify") as ws:
+            ws.send_text(json.dumps({"type": "auth", "token": "t", "sample_rate": 16000, "encoding": "pcm_s16le"}))
+            ws.send_bytes(b"\0" * 3200)
+            with pytest.raises(WebSocketDisconnect) as e:
+                ws.receive_text()
+    assert e.value.code == 1008 and verify.call_count == 2

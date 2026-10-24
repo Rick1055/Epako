@@ -99,15 +99,7 @@ def get_asr_engine():
             _asr_engine = DysarthriaSpeechRecognizer()
             print("[+] DysarthriaSpeechRecognizer loaded successfully.")
         except Exception as e:
-            print(f"[!] SpeechRecognizer fallback mode (offline or loading error: {e})")
-            class FallbackASR:
-                def transcribe(self, audio, sample_rate=16000, **kwargs):
-                    return {
-                        "text": "The morning sun gently illuminates the quiet cedar grove.",
-                        "latency_ms": 110.0,
-                        "device": "cpu-fallback",
-                    }
-            _asr_engine = FallbackASR()
+            raise HTTPException(status_code=503, detail=f"Speech recognizer unavailable: {e}")
     return _asr_engine
 
 
@@ -206,14 +198,14 @@ class VoiceSculptRequest(BaseModel):
 
 
 class ClinicalPdfReportRequest(BaseModel):
-    patient_id: Optional[str] = "PT-88219-DYS"
+    patient_id: str
     session_id: Optional[str] = None
-    patient_name: Optional[str] = "Eleanor Vance"
-    condition: Optional[str] = "Hypokinetic Dysarthria secondary to Parkinson's Disease"
-    clinician: Optional[str] = "Dr. Sarah Thornton, MS, CCC-SLP"
-    biomarkers: Optional[Dict[str, Any]] = None
-    utterances: Optional[List[Dict[str, Any]]] = None
-    slp_assessment: Optional[Dict[str, Any]] = None
+    patient_name: str
+    condition: str
+    clinician: str
+    biomarkers: Dict[str, Any]
+    utterances: List[Dict[str, Any]]
+    slp_assessment: Dict[str, Any]
     inline: Optional[bool] = True
 
 
@@ -328,13 +320,8 @@ async def rectify_speech(
     try:
         from biomarker_engine import compute_articulation_velocity
         telemetry = compute_articulation_velocity(audio, sample_rate=16000)
-    except Exception:
-        telemetry = {
-            "articulation_velocity": 4.2,
-            "pause_ratio": 0.16,
-            "speaking_rate": 3.8,
-            "phonation_stability": 96.2,
-        }
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Biomarker engine unavailable: {e}")
 
     total_latency = (time.time() - start_total) * 1000.0
 
@@ -373,19 +360,9 @@ async def extract_clinical_biomarkers(file: UploadFile = File(...)):
         results["instability"] = compute_phonatory_instability(audio, sample_rate=16000)
         results["fcr"] = compute_formant_centralization(audio, sample_rate=16000)
     except Exception as e:
-        print(f"[!] Biomarker calculation error: {e}")
-        results = {
-            "velocity": {"articulation_velocity": 4.1, "pause_ratio": 0.18, "speaking_rate": 3.6},
-            "instability": {"jitter_percent": 1.2, "shimmer_percent": 2.4, "stability_score": 96.4},
-            "fcr": {"fcr": 1.04, "vowel_space_expansion": 0.94},
-        }
+        raise HTTPException(status_code=503, detail=f"Biomarker engine unavailable: {e}")
 
-    return {
-        "success": True,
-        "biomarkers": results,
-        "overall_stability_score": 96.4,
-        "recommendation": "Phonation cadence is balanced. Vocal effort reduction optimal.",
-    }
+    return {"success": True, "biomarkers": results}
 
 
 @app.post("/api/voice/sculpt")
@@ -471,58 +448,25 @@ def create_clinical_pdf_report(req: ClinicalPdfReportRequest):
 
     session_id = req.session_id or f"EPK-{int(time.time()) % 1000000:06d}"
 
-    # Build structured report payload
     report_data = {
         "session_id": session_id,
         "evaluation_date": time.strftime("%B %d, %Y"),
         "clinic_name": "Epako Bio-Acoustic Speech Sanctuary",
         "patient": {
-            "name": req.patient_name or "Eleanor Vance",
-            "id": req.patient_id or "PT-88219-DYS",
-            "dob": "1958-04-12 (Age 68)",
-            "condition": req.condition or "Hypokinetic Dysarthria secondary to Parkinson's Disease",
-            "clinician": req.clinician or "Dr. Sarah Thornton, MS, CCC-SLP",
-            "clinician_npi": "NPI: 1982736450 | State Lic: #SLP-449102",
-            "cpt_codes": "CPT 92507 (Speech/Language Tx) | CPT 92524 (Acoustic Resonance)",
+            "name": req.patient_name,
+            "id": req.patient_id,
+            "condition": req.condition,
+            "clinician": req.clinician,
         },
-        "biomarkers": req.biomarkers or {
-            "articulation_velocity": 3.42,
-            "speaking_rate": 2.18,
-            "pause_ratio": 0.324,
-            "vocal_jitter_pct": 2.18,
-            "vocal_shimmer_pct": 5.64,
-            "formant_centralization_ratio": 1.160,
-            "mean_f0_hz": 142.5,
-            "stability_index": 91.2,
-        },
-        "utterances": req.utterances or [
-            {
-                "original_text": "I w-w-want to walk in the ga-garden this aft-afternoon.",
-                "repaired_text": "I want to walk in the garden this afternoon.",
-                "latency_ms": 78.4,
-            },
-            {
-                "original_text": "Please bring the wa-water cup to the b-bedside table.",
-                "repaired_text": "Please bring the water cup to the bedside table.",
-                "latency_ms": 62.1,
-            }
-        ],
-        "slp_assessment": req.slp_assessment or {
-            "impression": (
-                "Patient exhibits noticeable reduction in involuntary vocal hesitation and syllable elongation compared to initial intake. "
-                "Formant centralization has decreased from 1.285 to 1.160, indicating improved lingual range of motion during vowel production. "
-                "Vocal intensity remains stable with moderate benefit from biological timbre reinforcement."
-            ),
-            "home_plan": (
-                "Continue daily 15-minute Epako Speech Gym calibration. Prioritize open vowel prolongation drills (/a/, /i/) and paced diadochokinetic repetition (/pa-ta-ka/). "
-                "Recommend scheduled conversational practice before peak fatigue hours in early evening."
-            ),
-            "frequency": "Three 25-minute synchronous clinic sessions per week under CPT 92507.",
-        }
+        "biomarkers": req.biomarkers,
+        "utterances": req.utterances,
+        "slp_assessment": req.slp_assessment,
     }
 
     try:
         pdf_bytes = generate_clinical_pdf(report_data)
+    except KeyError as e:
+        raise HTTPException(status_code=422, detail=f"Missing report field: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate clinical PDF: {str(e)}")
 
@@ -532,15 +476,6 @@ def create_clinical_pdf_report(req: ClinicalPdfReportRequest):
         "Content-Type": "application/pdf"
     }
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
-
-
-@app.get("/api/session/{session_id}/report/pdf")
-def get_clinical_pdf_report(session_id: str, inline: bool = True):
-    """
-    GET convenience endpoint to download or view a session's Clinical SLP Evaluation PDF directly.
-    """
-    req = ClinicalPdfReportRequest(session_id=session_id, inline=inline)
-    return create_clinical_pdf_report(req)
 
 
 # ---------------------------------------------------------------------------
@@ -607,7 +542,6 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                 "rms": round(rms, 4),
                 "is_speaking": is_speaking,
                 "buffer_len": len(audio_buffer),
-                "cadence_bpm": 88 if is_speaking else 0,
             })
 
             # When speech ends, run rectification

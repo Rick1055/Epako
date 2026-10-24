@@ -109,7 +109,7 @@ def generate_acoustic_charts(metrics: Dict[str, Any], history: Optional[List[Dic
     norm_f2 = [2250, 1250, 850, 2250]
 
     # Dysarthric compressed vowel space (centralized toward 500 Hz / 1500 Hz)
-    fcr = float(metrics.get("formant_centralization_ratio", metrics.get("fcr", 1.15)))
+    fcr = float(metrics["formant_centralization_ratio"])
     scale = max(0.45, 1.0 / (fcr if fcr > 0 else 1.15))
     
     center_f1 = 450
@@ -122,7 +122,7 @@ def generate_acoustic_charts(metrics: Dict[str, Any], history: Optional[List[Dic
     ax1.scatter(norm_f2[:-1], norm_f1[:-1], color="#46734C", s=24, zorder=5)
 
     # Plot Patient Compressed Space (Solid Warm Terracotta)
-    ax1.plot(dys_f2, dys_f1, color="#D87D65", linewidth=1.6, label="Patient Space")
+    ax1.plot(dys_f2, dys_f1, color="#D87D65", linewidth=1.6, label="Schematic (scaled from FCR)")
     ax1.scatter(dys_f2[:-1], dys_f1[:-1], color="#D87D65", s=28, zorder=6)
 
     # Annotate Vowel Anchors
@@ -145,12 +145,10 @@ def generate_acoustic_charts(metrics: Dict[str, Any], history: Optional[List[Dic
 
     if history and len(history) >= 2:
         sessions = [f"S{i+1}" for i in range(len(history))]
-        velocities = [float(h.get("articulation_velocity", 3.0)) for h in history]
+        velocities = [float(h["articulation_velocity"]) for h in history]
     else:
-        # Default representative clinical baseline progression
-        sessions = ["W1", "W2", "W3", "W4", "Current"]
-        current_vel = float(metrics.get("articulation_velocity", 3.42))
-        velocities = [max(1.8, current_vel - 1.2), max(2.1, current_vel - 0.8), max(2.5, current_vel - 0.5), max(2.9, current_vel - 0.2), current_vel]
+        sessions, velocities = [], []
+        ax2.text(0.5, 0.5, "No longitudinal data", ha="center", va="center", transform=ax2.transAxes, fontsize=7, color="#383D36")
 
     x = np.arange(len(sessions))
     ax2.plot(x, velocities, color="#46734C", marker="o", linewidth=1.6, markersize=4, label="Articulation Velocity (syll/s)")
@@ -331,7 +329,7 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
         ],
         [
             Paragraph(f"Objective Telemetry Protocol for Speech-Language Pathologists  |  {clinic_name}", subtitle_style),
-            Paragraph("Status: <b>Verified Clinical Telemetry</b>", ParagraphStyle("StatusRight", fontName="Helvetica", fontSize=7, leading=8.5, textColor=COLOR_CELADON, alignment=TA_RIGHT))
+            ""
         ]
     ]
 
@@ -349,13 +347,11 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
     # ---------------------------------------------------------------------------
     # 2. PATIENT DEMOGRAPHICS & CLINICAL PROTOCOL STRIP
     # ---------------------------------------------------------------------------
-    pt = report_data.get("patient", {})
-    patient_name = pt.get("name", "Eleanor Vance")
-    patient_id = pt.get("id", "PT-88219-DYS")
-    dob = pt.get("dob", "1958-04-12 (Age 68)")
-    condition = pt.get("condition", "Hypokinetic Dysarthria secondary to Parkinson's Disease")
-    clinician = pt.get("clinician", "Dr. Sarah Thornton, MS, CCC-SLP")
-    cpt_codes = pt.get("cpt_codes", "CPT 92507 (Speech/Language Tx) | CPT 92524 (Acoustic Resonance)")
+    pt = report_data["patient"]
+    patient_name = pt["name"]
+    patient_id = pt["id"]
+    condition = pt["condition"]
+    clinician = pt["clinician"]
 
     patient_grid_data = [
         [
@@ -365,16 +361,10 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
             Paragraph(patient_id, body_style),
         ],
         [
-            Paragraph("<b>Birth Date / Age:</b>", bold_label_style),
-            Paragraph(dob, body_style),
             Paragraph("<b>Attending SLP:</b>", bold_label_style),
             Paragraph(clinician, body_style),
-        ],
-        [
             Paragraph("<b>Pathology Protocol:</b>", bold_label_style),
             Paragraph(condition, body_style),
-            Paragraph("<b>Reimbursement:</b>", bold_label_style),
-            Paragraph(cpt_codes, body_style),
         ]
     ]
 
@@ -397,15 +387,15 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
     # ---------------------------------------------------------------------------
     story.append(Paragraph("Acoustic Telemetry &amp; Neuromotor Biomarker Matrix", section_header_style))
 
-    bio = report_data.get("biomarkers", {})
-    vel = float(bio.get("articulation_velocity", 3.42))
-    speaking_rate = float(bio.get("speaking_rate", 2.18))
-    pause_ratio = float(bio.get("pause_ratio", 0.324)) * 100
-    jitter = float(bio.get("vocal_jitter_pct", bio.get("jitter_percent", 2.18)))
-    shimmer = float(bio.get("vocal_shimmer_pct", bio.get("shimmer_percent", 5.64)))
-    fcr = float(bio.get("formant_centralization_ratio", bio.get("fcr", 1.16)))
-    f0 = float(bio.get("mean_f0_hz", bio.get("mean_f0", 142.5)))
-    stability = float(bio.get("stability_index", 91.2))
+    bio = report_data["biomarkers"]
+    vel = float(bio["articulation_velocity"])
+    speaking_rate = float(bio["speaking_rate"])
+    pause_ratio = float(bio["pause_ratio"]) * 100
+    jitter = float(bio["vocal_jitter_pct"])
+    shimmer = float(bio["vocal_shimmer_pct"])
+    fcr = float(bio["formant_centralization_ratio"])
+    f0 = float(bio["mean_f0_hz"])
+    stability = float(bio["stability_index"])
 
     def vel_status(v):
         if v >= 3.8: return Paragraph("Normative", clinical_highlight_style)
@@ -432,54 +422,47 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
             Paragraph("Clinical Biomarker Parameter", table_header_style),
             Paragraph("Observed Telemetry", table_header_style),
             Paragraph("Normative Window", table_header_style),
-            Paragraph("Baseline Reference", table_header_style),
             Paragraph("Neuromotor Interpretation", table_header_style),
         ],
         [
             Paragraph("<b>Articulation Velocity</b> (active phonation)", table_cell_style),
             Paragraph(f"<b>{vel:.2f} syll / sec</b>", table_cell_center),
             Paragraph("3.80 - 5.20 syll / s", table_cell_center),
-            Paragraph("2.65 syll / s", table_cell_center),
             vel_status(vel),
         ],
         [
             Paragraph("<b>Pause Duration Ratio</b> (involuntary motor pause)", table_cell_style),
             Paragraph(f"<b>{pause_ratio:.1f} %</b>", table_cell_center),
             Paragraph("12.0 - 22.0 %", table_cell_center),
-            Paragraph("41.2 %", table_cell_center),
             pause_status(pause_ratio),
         ],
         [
             Paragraph("<b>Vocal Period Jitter</b> (F0 cycle stability)", table_cell_style),
             Paragraph(f"<b>{jitter:.2f} %</b>", table_cell_center),
             Paragraph("&lt; 1.04 %", table_cell_center),
-            Paragraph("3.42 %", table_cell_center),
             jitter_status(jitter),
         ],
         [
             Paragraph("<b>Vocal Amplitude Shimmer</b> (intensity perturbation)", table_cell_style),
             Paragraph(f"<b>{shimmer:.2f} %</b>", table_cell_center),
             Paragraph("&lt; 3.81 %", table_cell_center),
-            Paragraph("7.80 %", table_cell_center),
-            Paragraph("Mild Breathiness", table_cell_center),
+            Paragraph("Normative" if shimmer < 3.81 else "Elevated", table_cell_center),
         ],
         [
             Paragraph("<b>Formant Centralization Ratio (FCR)</b>", table_cell_style),
             Paragraph(f"<b>{fcr:.3f}</b>", table_cell_center),
             Paragraph("0.850 - 1.020", table_cell_center),
-            Paragraph("1.285", table_cell_center),
             fcr_status(fcr),
         ],
         [
             Paragraph("<b>Composite Vocal Stability Score</b>", table_cell_style),
             Paragraph(f"<b>{stability:.1f} / 100</b>", clinical_highlight_style),
             Paragraph("&gt; 88.0 / 100", table_cell_center),
-            Paragraph("76.4 / 100", table_cell_center),
-            Paragraph("Positive Trend", clinical_highlight_style),
+            Paragraph("Normative" if stability > 88.0 else "Below normative", table_cell_center),
         ],
     ]
 
-    biomarker_table = Table(biomarker_rows, colWidths=[168, 86, 96, 86, 108])
+    biomarker_table = Table(biomarker_rows, colWidths=[168, 120, 130, 126])
     biomarker_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), COLOR_CELADON_LIGHT),
         ("BOX", (0, 0), (-1, -1), 0.6, COLOR_BORDER),
@@ -508,18 +491,7 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
     # ---------------------------------------------------------------------------
     story.append(Paragraph("Speech Rehabilitation Samples &amp; Intent Clarification", section_header_style))
 
-    utterances = report_data.get("utterances", [
-        {
-            "original_text": "I w-w-want to walk in the ga-garden this aft-afternoon.",
-            "repaired_text": "I want to walk in the garden this afternoon.",
-            "latency_ms": 78.4,
-        },
-        {
-            "original_text": "Please bring the wa-water cup to the b-bedside table.",
-            "repaired_text": "Please bring the water cup to the bedside table.",
-            "latency_ms": 62.1,
-        }
-    ])
+    utterances = report_data["utterances"]
 
     utt_rows = [
         [
@@ -531,9 +503,9 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
 
     for u in utterances[:2]:
         utt_rows.append([
-            Paragraph(f'<i>"{u.get("original_text", "")}"</i>', table_cell_style),
-            Paragraph(f'<b>"{u.get("repaired_text", "")}"</b>', table_cell_style),
-            Paragraph(f"{u.get('latency_ms', 75.0):.1f} ms", table_cell_center),
+            Paragraph(f'<i>"{u["original_text"]}"</i>', table_cell_style),
+            Paragraph(f'<b>"{u["repaired_text"]}"</b>', table_cell_style),
+            Paragraph(f"{u['latency_ms']:.1f} ms", table_cell_center),
         ])
 
     utt_table = Table(utt_rows, colWidths=[240, 244, 60])
@@ -556,19 +528,10 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
     # ---------------------------------------------------------------------------
     story.append(Paragraph("Speech-Language Pathologist Assessment &amp; Treatment Plan", section_header_style))
 
-    slp = report_data.get("slp_assessment", {})
-    impression = slp.get(
-        "impression",
-        "Patient exhibits noticeable reduction in involuntary vocal hesitation and syllable elongation compared to initial intake. "
-        "Formant centralization has decreased from 1.285 to 1.160, indicating improved lingual range of motion during vowel production. "
-        "Vocal intensity remains stable with moderate benefit from biological timbre reinforcement."
-    )
-    home_plan = slp.get(
-        "home_plan",
-        "Continue daily 15-minute Epako Speech Gym calibration. Prioritize open vowel prolongation drills (/a/, /i/) and paced diadochokinetic repetition (/pa-ta-ka/). "
-        "Recommend scheduled conversational practice before peak fatigue hours in early evening."
-    )
-    freq = slp.get("frequency", "Three 25-minute synchronous clinic sessions per week under CPT 92507.")
+    slp = report_data["slp_assessment"]
+    impression = slp["impression"]
+    home_plan = slp["home_plan"]
+    freq = slp["frequency"]
 
     plan_table_data = [
         [
@@ -602,14 +565,9 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
     # ---------------------------------------------------------------------------
     # 7. CLINICIAN SIGNATURE & DIGITAL AUDIT BLOCK
     # ---------------------------------------------------------------------------
-    clinician_npi = pt.get("clinician_npi", "NPI: 1982736450 | State Lic: #SLP-449102")
     sig_data = [
         [
-            Paragraph(f"<b>Attending Clinician:</b> {clinician}<br/>{clinician_npi}", body_style),
-            Paragraph("<b>Digital Verification:</b><br/>SHA256: e8f4c219ba7145d2...verified", ParagraphStyle("Hash", fontName="Helvetica", fontSize=6.5, leading=8, textColor=COLOR_SLATE, alignment=TA_RIGHT))
-        ],
-        [
-            Paragraph("<i>Signature on file | Authenticated via Epako Medical Gateway</i>", ParagraphStyle("Sig", fontName="Helvetica-Oblique", fontSize=6.8, leading=8.2, textColor=COLOR_CELADON)),
+            Paragraph(f"<b>Attending Clinician:</b> {clinician}", body_style),
             Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}", ParagraphStyle("TimeRight", fontName="Helvetica", fontSize=6.5, leading=8, textColor=COLOR_SLATE, alignment=TA_RIGHT))
         ]
     ]
@@ -637,50 +595,3 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
 
     return pdf_bytes
 
-
-if __name__ == "__main__":
-    test_data = {
-        "evaluation_date": datetime.now().strftime("%B %d, %Y"),
-        "clinic_name": "Epako Bio-Acoustic Speech Sanctuary",
-        "session_id": "EPK-849201",
-        "patient": {
-            "name": "Eleanor Vance",
-            "id": "PT-88219-DYS",
-            "dob": "1958-04-12 (Age 68)",
-            "condition": "Hypokinetic Dysarthria secondary to Parkinson's Disease",
-            "clinician": "Dr. Sarah Thornton, MS, CCC-SLP",
-            "clinician_npi": "NPI: 1982736450 · State Lic: #SLP-449102",
-            "cpt_codes": "CPT 92507 (Speech/Language Tx) · CPT 92524 (Acoustic Resonance)",
-        },
-        "biomarkers": {
-            "articulation_velocity": 3.42,
-            "speaking_rate": 2.18,
-            "pause_ratio": 0.324,
-            "vocal_jitter_pct": 2.18,
-            "vocal_shimmer_pct": 5.64,
-            "formant_centralization_ratio": 1.160,
-            "mean_f0_hz": 142.5,
-            "stability_index": 91.2,
-        },
-        "utterances": [
-            {
-                "original_text": "I w-w-want to walk in the ga-garden this aft-afternoon.",
-                "repaired_text": "I want to walk in the garden this afternoon.",
-                "latency_ms": 78.4,
-            },
-            {
-                "original_text": "Please bring the wa-water cup to the b-bedside table.",
-                "repaired_text": "Please bring the water cup to the bedside table.",
-                "latency_ms": 62.1,
-            }
-        ],
-        "slp_assessment": {
-            "impression": "Patient demonstrates consistent progress in phonatory stability and vowel distinctiveness. Vowel space expansion reflects reduced tongue centralization.",
-            "home_plan": "Daily 15-minute exercises focusing on pitch glide and sustained phonation.",
-            "frequency": "Three 25-minute synchronous clinic sessions per week under CPT 92507.",
-        }
-    }
-
-    test_output = "clinical_report_sample.pdf"
-    pdf = generate_clinical_pdf(test_data, output_path=test_output)
-    print(f"Generated sample PDF of size: {len(pdf)} bytes")

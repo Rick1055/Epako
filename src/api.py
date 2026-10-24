@@ -8,7 +8,7 @@ Endpoints:
 - POST /api/biomarkers    : Clinical bio-acoustic telemetry extraction (Speech Gym)
 - POST /api/voice/sculpt  : Real-time vocal parameter sculpting (Warmth, Cadence, Pitch)
 - POST /api/voice/bank    : Pre-morbid voice note acoustic extraction & profile banking
-- GET  /health            : Service health and GPU compute status
+- GET  /health            : Liveness probe
 """
 
 import os
@@ -20,6 +20,8 @@ import tempfile
 import shutil
 from datetime import datetime, timezone
 import threading
+import functools
+import collections
 import asyncio
 from typing import Optional, Dict, Any, List
 from uuid import UUID
@@ -46,14 +48,16 @@ app = FastAPI(
 )
 
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_AUDIO_SECONDS = 60
+_MAX_WS_CHUNK_BYTES = 256 * 1024
 
 # CORS Middleware - origins come from CORS_ALLOWED_ORIGINS (comma-separated); default is none
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # ---------------------------------------------------------------------------
@@ -86,7 +90,7 @@ def get_repair_engine(token, user_id):
         rows = user_client(token).table("patient_profiles").select("phonetic_corrections").eq("user_id", user_id).execute().data
         return IntentRepair(feedback_engine=FeedbackEngine((rows[0]["phonetic_corrections"] if rows else None) or {}))
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Repair engine unavailable: {e}")
+        raise fail(503, "Repair engine unavailable.", e)
 
 
 def get_restoration_engine():
@@ -111,16 +115,15 @@ def get_asr_engine():
                 _asr_engine = DysarthriaSpeechRecognizer()
                 print("[+] DysarthriaSpeechRecognizer loaded successfully.")
             except Exception as e:
-                raise HTTPException(status_code=503, detail=f"Speech recognizer unavailable: {e}")
+                raise fail(503, "Speech recognizer unavailable.", e)
         return _asr_engine
 
 
 def verify_token(token: str):
     try:
-        from supabase_manager import SupabaseManager
-        client = SupabaseManager().client
+        client = _auth_client()
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Auth unavailable: {e}")
+        raise fail(503, "Auth unavailable.", e)
     try:
         res = client.auth.get_user(token)
     except Exception:
@@ -147,11 +150,56 @@ def service_client():
     return create_client(url, key)
 
 
+def fail(status: int, public: str, exc: Exception) -> HTTPException:
+    """Logs the real error server-side and returns a message that leaks no internals."""
+    print(f"[!] {public} {exc}")
+    return HTTPException(status_code=status, detail=public)
+
+
+@functools.lru_cache(maxsize=1)
+def _auth_client():
+    from supabase_manager import SupabaseManager
+    return SupabaseManager().client
+
+
+def _password_ok(email, password) -> bool:
+    """Re-authentication before destructive actions. shortcut: accounts without a password (magic link/OAuth) cannot pass yet."""
+    from supabase_manager import SupabaseManager
+    try:
+        return bool(SupabaseManager().client.auth.sign_in_with_password({"email": email, "password": password}).user)
+    except Exception:
+        return False
+
+
+_hits = collections.defaultdict(collections.deque)
+_hits_lock = threading.Lock()
+
+
+def hit(name: str, user_id, limit: int, per: float = 60.0) -> None:
+    """Per-user sliding-window limit. shortcut: in-process memory, so it resets on restart and is per worker; use Redis for several workers."""
+    now = time.monotonic()
+    with _hits_lock:
+        q = _hits[(name, user_id)]
+        while q and now - q[0] > per:
+            q.popleft()
+        if len(q) >= limit:
+            raise HTTPException(status_code=429, detail="Too many requests.", headers={"Retry-After": str(int(per))})
+        q.append(now)
+
+
 async def require_user(authorization: Optional[str] = Header(None)):
     scheme, _, token = (authorization or "").partition(" ")
     if scheme.lower() != "bearer" or not token:
         raise HTTPException(status_code=401, detail="Missing bearer token")
     return await asyncio.to_thread(verify_token, token)
+
+
+def rate_limit(name: str, limit: int, per: float = 60.0):
+    """Dependency: authenticates the caller, then applies hit()."""
+    async def dep(user=Depends(require_user)):
+        hit(name, user.id, limit, per)
+        return user
+    return dep
 
 
 # ---------------------------------------------------------------------------
@@ -160,17 +208,22 @@ async def require_user(authorization: Optional[str] = Header(None)):
 def decode_audio_bytes(audio_bytes: bytes, target_sr: int = 16000) -> np.ndarray:
     """Reads raw audio bytes (WAV, MP3, OGG, WebM) into a 16kHz float32 numpy array."""
     try:
-        data, sr = sf.read(io.BytesIO(audio_bytes), dtype="float32")
+        with sf.SoundFile(io.BytesIO(audio_bytes)) as f:
+            sr = f.samplerate
+            data = f.read(frames=(MAX_AUDIO_SECONDS + 1) * sr, dtype="float32")  # bounded: never decode more than needed to see it is too long
     except Exception:
         import tempfile
         with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
             tmp.write(audio_bytes)
             tmp_path = tmp.name
         try:
-            data, sr = librosa.load(tmp_path, sr=target_sr, mono=True)
+            data, sr = librosa.load(tmp_path, sr=target_sr, mono=True, duration=MAX_AUDIO_SECONDS + 1)
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
+
+    if len(data) > MAX_AUDIO_SECONDS * sr:
+        raise HTTPException(status_code=413, detail=f"Audio longer than {MAX_AUDIO_SECONDS} seconds.")
 
     if data.ndim > 1:
         data = np.mean(data, axis=1)
@@ -226,20 +279,7 @@ class ClinicalPdfReportRequest(BaseModel):
 
 @app.get("/health")
 def health_check():
-    """System status and compute availability."""
-    import torch
-    has_gpu = torch.cuda.is_available()
-    return {
-        "status": "online",
-        "service": "Epako Voice AI Speech Gateway",
-        "device": "cuda" if has_gpu else "cpu",
-        "gpu_name": torch.cuda.get_device_name(0) if has_gpu else "None",
-        "models": {
-            "asr_engine": "Parakeet-TDT (FastConformer)",
-            "intent_repair": "Acoustic Dysfluency Normalizer",
-            "voice_restoration": "Neural Biological Formant Vocoder",
-        },
-    }
+    return {"status": "online"}
 
 
 @app.post("/api/rectify")
@@ -247,7 +287,7 @@ async def rectify_speech(
     request: Request,
     file: Optional[UploadFile] = File(None),
     authorization: str = Header(...),
-    user=Depends(require_user),
+    user=Depends(rate_limit("rectify", 30)),
 ):
     """
     Core Biological Voice Rectification Pipeline:
@@ -275,7 +315,7 @@ async def rectify_speech(
             rate_pct = body.get("rate_pct", 0)
             warmth_pct = body.get("warmth_pct", 68)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid JSON payload: {e}")
+            raise fail(400, "Invalid JSON payload.", e)
     elif file is not None:
         raw_bytes = await file.read()
     else:
@@ -338,7 +378,7 @@ async def rectify_speech(
         from biomarker_engine import compute_articulation_velocity
         telemetry = await asyncio.to_thread(compute_articulation_velocity, audio, sample_rate=16000)
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Biomarker engine unavailable: {e}")
+        raise fail(503, "Biomarker engine unavailable.", e)
 
     total_latency = (time.time() - start_total) * 1000.0
 
@@ -357,7 +397,7 @@ async def rectify_speech(
     }
 
 
-@app.post("/api/biomarkers", dependencies=[Depends(require_user)])
+@app.post("/api/biomarkers", dependencies=[Depends(rate_limit("biomarkers", 20))])
 async def extract_clinical_biomarkers(file: UploadFile = File(...)):
     """
     Speech Gym: Extracts deep objective clinical biomarkers from speech audio.
@@ -379,12 +419,12 @@ async def extract_clinical_biomarkers(file: UploadFile = File(...)):
         results["instability"] = await asyncio.to_thread(compute_phonatory_instability, audio, sample_rate=16000)
         results["formant_compression"] = await asyncio.to_thread(compute_formant_centralization, audio, sample_rate=16000)
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Biomarker engine unavailable: {e}")
+        raise fail(503, "Biomarker engine unavailable.", e)
 
     return {"success": True, "biomarkers": results}
 
 
-@app.post("/api/voice/sculpt", dependencies=[Depends(require_user)])
+@app.post("/api/voice/sculpt", dependencies=[Depends(rate_limit("sculpt", 20))])
 async def sculpt_voice_timbre(request: VoiceSculptRequest):
     """
     Voice Identity Studio: Real-time preview of sculpted voice parameters.
@@ -418,7 +458,7 @@ async def sculpt_voice_timbre(request: VoiceSculptRequest):
     }
 
 
-@app.post("/api/voice/bank", dependencies=[Depends(require_user)])
+@app.post("/api/voice/bank", dependencies=[Depends(rate_limit("bank", 5))])
 async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
     """
     Pre-Morbid Voice Banking: Reconstructs biological timbre from historical voice recordings.
@@ -454,6 +494,7 @@ async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
 
 class DeleteDataRequest(BaseModel):
     confirm: str
+    password: str
 
 
 def _purge_audio(writer, uid: str) -> None:
@@ -475,7 +516,7 @@ def _purge_audio(writer, uid: str) -> None:
 
 
 @app.delete("/api/me/data")
-def delete_my_data(req: DeleteDataRequest, user=Depends(require_user)):
+def delete_my_data(req: DeleteDataRequest, user=Depends(rate_limit("delete", 3, 3600))):
     """
     Permanently erases the caller's account: stored audio, local feedback data, then the auth user,
     whose deletion cascades to profile, sessions, biomarkers, utterances, grants and link codes.
@@ -483,18 +524,20 @@ def delete_my_data(req: DeleteDataRequest, user=Depends(require_user)):
     """
     if req.confirm != "DELETE":
         raise HTTPException(status_code=400, detail='Send {"confirm": "DELETE"} to proceed.')
+    if not _password_ok(user.email, req.password):
+        raise HTTPException(status_code=403, detail="Password incorrect.")
     uid = str(UUID(str(user.id)))  # also guards the local path below
     writer = service_client()
     try:
         _purge_audio(writer, uid)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Audio deletion failed; nothing else was deleted: {e}")
+        raise fail(500, "Audio deletion failed; nothing else was deleted.", e)
     shutil.rmtree(os.path.join("data", "patient_profiles", uid), ignore_errors=True)
     try:
         writer.auth.admin.delete_user(uid)
     except Exception as e:
         # shortcut: clinicians who authored assessments hit a foreign key here; hand-over flow comes later
-        raise HTTPException(status_code=409, detail=f"Account could not be deleted: {e}")
+        raise fail(409, "Account could not be deleted.", e)
     return {"success": True}
 
 
@@ -525,7 +568,7 @@ def start_session(authorization: str = Header(...), user=Depends(require_user)):
 
 
 @app.post("/api/sessions/{session_id}/utterances")
-def save_utterance(session_id: UUID, req: UtteranceIn, authorization: str = Header(...), user=Depends(require_user)):
+def save_utterance(session_id: UUID, req: UtteranceIn, authorization: str = Header(...), user=Depends(rate_limit("utterance", 120))):
     """The patient's yes/no (final_text == shown_text means yes) is stored and teaches their correction table."""
     from feedback_engine import FeedbackEngine, words
     client = user_client(authorization.partition(" ")[2])
@@ -564,7 +607,7 @@ async def analyze_session_audio(
     session_id: UUID = Form(...),
     file: UploadFile = File(...),
     authorization: str = Header(...),
-    user=Depends(require_user),
+    user=Depends(rate_limit("analyze", 20)),
 ):
     """Measures biomarkers on the server and stores them; clients cannot write biomarker_logs."""
     raw_bytes = await file.read(_MAX_UPLOAD_BYTES + 1)
@@ -583,7 +626,7 @@ async def analyze_session_audio(
         pho = await asyncio.to_thread(compute_phonatory_instability, audio, sample_rate=16000)
         frm = await asyncio.to_thread(compute_formant_centralization, audio, sample_rate=16000)
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Biomarker engine unavailable: {e}")
+        raise fail(503, "Biomarker engine unavailable.", e)
 
     voiced = pho["mean_f0"] > 0  # the engine returns 0.0 when too little voiced speech; that is "not measured"
     record = {
@@ -602,7 +645,7 @@ async def analyze_session_audio(
     try:
         saved = await asyncio.to_thread(lambda: writer.table("biomarker_logs").insert(record).execute().data)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Could not store biomarkers: {e}")
+        raise fail(500, "Could not store biomarkers.", e)
     return {"success": True, "biomarkers": saved[0] if saved else record}
 
 
@@ -613,7 +656,7 @@ async def analyze_session_audio(
 def create_clinical_pdf_report(
     req: ClinicalPdfReportRequest,
     authorization: str = Header(...),
-    user=Depends(require_user),
+    user=Depends(rate_limit("report", 20)),
 ):
     """
     Everything in the report comes from the database under the caller's JWT (RLS applies):
@@ -670,9 +713,9 @@ def create_clinical_pdf_report(
     try:
         pdf_bytes = generate_clinical_pdf(report_data)
     except KeyError as e:
-        raise HTTPException(status_code=422, detail=f"Missing report field: {e}")
+        raise fail(422, "Report data incomplete.", e)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate clinical PDF: {str(e)}")
+        raise fail(500, "Failed to generate clinical PDF.", e)
 
     disposition_type = "inline" if req.inline else "attachment"
     headers = {
@@ -699,6 +742,7 @@ async def websocket_speech_rectifier(websocket: WebSocket):
         if auth_msg.get("type") != "auth" or auth_msg.get("sample_rate") != 16000 or auth_msg.get("encoding") != "pcm_s16le":
             raise ValueError("first message must be auth with sample_rate 16000 and encoding pcm_s16le")
         user = await asyncio.to_thread(verify_token, auth_msg.get("token") or "")
+        hit("ws", user.id, 10)
     except Exception:
         try:
             await websocket.close(code=1008)
@@ -715,10 +759,18 @@ async def websocket_speech_rectifier(websocket: WebSocket):
     silence_threshold = 0.015
     min_speech_frames = 5
     max_silence_frames = 7
+    last_auth = time.monotonic()
 
     try:
         while True:
             message = await websocket.receive()
+            if time.monotonic() - last_auth > 300:  # a long-lived socket must not outlive an expired or revoked token
+                try:
+                    await asyncio.to_thread(verify_token, auth_msg["token"])
+                except HTTPException:
+                    await websocket.close(code=1008)
+                    return
+                last_auth = time.monotonic()
             raw_bytes = None
 
             if "bytes" in message and message["bytes"]:
@@ -736,6 +788,9 @@ async def websocket_speech_rectifier(websocket: WebSocket):
 
             if not raw_bytes:
                 continue
+            if len(raw_bytes) > _MAX_WS_CHUNK_BYTES:
+                await websocket.close(code=1009)
+                return
 
             try:
                 chunk = np.frombuffer(raw_bytes, dtype=np.int16).astype(np.float32) / 32768.0

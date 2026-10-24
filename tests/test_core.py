@@ -100,13 +100,13 @@ def test_delete_my_data_wipes_audio_then_account():
     writer = mock.MagicMock()
     writer.storage.from_.return_value = bucket
     writer.auth.admin.delete_user.side_effect = lambda u: order.append(("delete_user", u))
-    api.app.dependency_overrides[api.require_user] = lambda: mock.Mock(id=uid)
+    api.app.dependency_overrides[api.require_user] = lambda: mock.Mock(id=uid, email="p@example.com")
     try:
-        with mock.patch.object(api, "service_client", return_value=writer):
+        with mock.patch.object(api, "service_client", return_value=writer), mock.patch.object(api, "_password_ok", return_value=True):
             c = TestClient(api.app)
-            assert c.request("DELETE", "/api/me/data", json={"confirm": "no"}).status_code == 400
+            assert c.request("DELETE", "/api/me/data", json={"confirm": "no", "password": "pw"}).status_code == 400
             assert order == []
-            assert c.request("DELETE", "/api/me/data", json={"confirm": "DELETE"}).status_code == 200
+            assert c.request("DELETE", "/api/me/data", json={"confirm": "DELETE", "password": "pw"}).status_code == 200
     finally:
         api.app.dependency_overrides.clear()
     assert order == [("remove", [f"{uid}/raw/a.wav"]), ("delete_user", uid)]
@@ -188,3 +188,93 @@ def test_real_voices_speak_and_rate_changes_duration():
     slow = local_tts.synthesize("The morning sun rises.", rate="-30%")["duration_sec"]
     fast = local_tts.synthesize("The morning sun rises.", rate="+50%")["duration_sec"]
     assert 0.5 < fast < slow < 10
+
+
+def _as(uid):
+    import api
+    api.app.dependency_overrides[api.require_user] = lambda: mock.Mock(id=uid, email="p@example.com")
+
+
+def test_delete_requires_the_password():
+    from fastapi.testclient import TestClient
+    import api
+    writer = mock.MagicMock()
+    _as("33333333-3333-3333-3333-333333333333")
+    try:
+        with mock.patch.object(api, "service_client", return_value=writer), mock.patch.object(api, "_password_ok", return_value=False):
+            r = TestClient(api.app).request("DELETE", "/api/me/data", json={"confirm": "DELETE", "password": "wrong"})
+    finally:
+        api.app.dependency_overrides.clear()
+    assert r.status_code == 403
+    writer.auth.admin.delete_user.assert_not_called()
+
+
+def test_rate_limit_is_per_user_and_expires():
+    import api
+    with mock.patch("api.time.monotonic") as clock:
+        clock.return_value = 0.0
+        for _ in range(3):
+            api.hit("t", "u1", 3, 60)
+        with pytest.raises(api.HTTPException) as e:
+            api.hit("t", "u1", 3, 60)
+        assert e.value.status_code == 429
+        api.hit("t", "u2", 3, 60)   # another user is unaffected
+        clock.return_value = 61.0
+        api.hit("t", "u1", 3, 60)   # the window has passed
+
+
+def test_delete_is_throttled_over_http():
+    from fastapi.testclient import TestClient
+    import api
+    _as("44444444-4444-4444-4444-444444444444")
+    try:
+        c = TestClient(api.app)
+        codes = [c.request("DELETE", "/api/me/data", json={"confirm": "no", "password": "x"}).status_code for _ in range(4)]
+    finally:
+        api.app.dependency_overrides.clear()
+    assert codes == [400, 400, 400, 429]
+
+
+def test_overlong_audio_is_rejected_cheaply():
+    import io
+    import soundfile as sf
+    import api
+
+    def wav(seconds):
+        b = io.BytesIO()
+        sf.write(b, np.zeros(16000 * seconds, dtype="float32"), 16000, format="WAV")
+        return b.getvalue()
+
+    assert len(api.decode_audio_bytes(wav(2))) == 32000
+    with pytest.raises(api.HTTPException) as e:
+        api.decode_audio_bytes(wav(61))
+    assert e.value.status_code == 413
+
+
+def test_errors_and_health_leak_nothing():
+    import re
+    from fastapi.testclient import TestClient
+    import api
+    assert api.fail(500, "Nope.", RuntimeError("db password=hunter2")).detail == "Nope."
+    assert not re.search(r'detail=f"[^"]*\{(e|str\(e\))\}', (ROOT / "src/api.py").read_text(encoding="utf-8"))
+    assert TestClient(api.app).get("/health").json() == {"status": "online"}
+
+
+def test_websocket_rejects_bad_auth_and_oversized_chunks():
+    import json
+    from fastapi.testclient import TestClient
+    from starlette.websockets import WebSocketDisconnect
+    import api
+    c = TestClient(api.app)
+    with c.websocket_connect("/ws/rectify") as ws:
+        ws.send_text("{}")
+        with pytest.raises(WebSocketDisconnect) as e:
+            ws.receive_text()
+        assert e.value.code == 1008
+    with mock.patch.object(api, "verify_token", return_value=mock.Mock(id="ws-user")):
+        with c.websocket_connect("/ws/rectify") as ws:
+            ws.send_text(json.dumps({"type": "auth", "token": "t", "sample_rate": 16000, "encoding": "pcm_s16le"}))
+            ws.send_bytes(b"\0" * (300 * 1024))
+            with pytest.raises(WebSocketDisconnect) as e:
+                ws.receive_text()
+            assert e.value.code == 1009

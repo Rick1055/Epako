@@ -42,7 +42,7 @@ Owner of the logic: `src/feedback_engine.py` (`FeedbackEngine.apply` / `.learn`)
 | `POST /api/sessions/{id}/finish` | — | `{duration_seconds, utterances_count, accuracy_rate}` |
 | `POST /api/session/analyze` | form: `session_id`, `file` (audio) | `{success, biomarkers}`; needs `SUPABASE_SERVICE_ROLE_KEY` |
 | `POST /api/session/report/pdf` | `{session_id, inline?}` | PDF; 422 if no assessment or unmeasured values |
-| `DELETE /api/me/data` | `{confirm: "DELETE"}` | `{success}`; audio first, then account |
+| `DELETE /api/me/data` | `{confirm: "DELETE", password}` (password is re-checked) | `{success}`; audio first, then account; 3 per hour |
 | `POST /api/rectify` | audio (multipart or base64 JSON) | `{raw_transcript, repaired_text, rectified_audio, latency, telemetry}` |
 | `POST /api/biomarkers`, `/api/voice/sculpt`, `/api/voice/bank`, `GET /health`, `WS /ws/rectify` | see `src/api.py` | |
 
@@ -54,3 +54,4 @@ Owner of the logic: `src/feedback_engine.py` (`FeedbackEngine.apply` / `.learn`)
 4. Failures return an error; no silent fallback to made-up output.
 5. Secrets (`.env`, service-role key) are never committed or sent to a client.
 6. The API is not the security boundary: clients hold the public anon key and can call Supabase directly, so every rule above must be enforced by row-level security and is attacked in `tests/test_rls.py` (e.g. an utterance must belong to a session of the same patient).
+7. Abuse limits: every authenticated route is rate-limited per user (`api.hit` / `rate_limit`), audio is capped at 60 s, WebSocket chunks at 256 KB, WebSocket tokens are re-verified every 5 minutes, and error responses are generic (the real error is logged server-side). `/health` returns only `{"status": "online"}`.

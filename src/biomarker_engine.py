@@ -4,7 +4,7 @@ Speech Gym: Bio-Acoustic Biomarker Engine
 Extracts objective clinical telemetry from speech audio:
 1. Articulation Velocity & Pause Ratio (Motor Speed & Bradykinesia)
 2. Phonatory Instability: Jitter & Shimmer (Laryngeal Ataxia)
-3. Formant Centralization Ratio: FCR (Vowel Space Compression via LPC)
+3. Formant Compression Index (pooled F1/F2 scatter via LPC; not the vowel-specific FCR)
 4. Self-Attention Entropy Probing (WavLM Transformer Probing)
 """
 
@@ -134,12 +134,12 @@ def compute_formant_centralization(audio, sample_rate=16000):
 
     if len(f1_list) < 5:
         return {
-            "mean_f1": 500.0,
-            "mean_f2": 1500.0,
-            "f1_dispersion": 0.0,
-            "f2_dispersion":0.0,
-            "vowel_space_area": 0.0,
-            "centralization_ratio": 1.0
+            "mean_f1": None,
+            "mean_f2": None,
+            "f1_dispersion": None,
+            "f2_dispersion": None,
+            "vowel_space_area": None,
+            "formant_compression_index": None
         }
 
     f1_arr = np.array(f1_list)
@@ -151,7 +151,7 @@ def compute_formant_centralization(audio, sample_rate=16000):
     std_f2 = float(np.std(f2_arr))
 
     vowel_space_area =float(np.pi*std_f1*std_f2)
-    centralization_ratio = float(10000.0/ (vowel_space_area+1e-5))
+    formant_compression_index = float(10000.0/ (vowel_space_area+1e-5))
 
     return {
         "mean_f1": mean_f1,
@@ -159,7 +159,7 @@ def compute_formant_centralization(audio, sample_rate=16000):
         "f1_dispersion": std_f1,
         "f2_dispersion": std_f2,
         "vowel_space_area": vowel_space_area,
-        "centralization_ratio": centralization_ratio
+        "formant_compression_index": formant_compression_index
     }
 
 _WAVLM_MODEL = None
@@ -232,7 +232,8 @@ def extract_speech_gym_biomarkers(audio, sample_rate=16000, model=None):
     score = 100.0
     score -= min(30.0, phonatory["jitter_percent"] * 3.0)   # High jitter penalty
     score -= min(25.0, articulation["pause_ratio"] * 35.0)  # Pause struggle penalty
-    score -= min(25.0, formants["centralization_ratio"] * 0.05) # Vowel collapse penalty
+    if formants["formant_compression_index"] is not None:
+        score -= min(25.0, formants["formant_compression_index"] * 0.05) # Vowel collapse penalty
     composite_score = float(np.clip(score, 10.0, 100.0))
 
     return {

@@ -119,14 +119,14 @@ def run_e2e_test():
         "articulation_velocity": 3.85,
         "speaking_rate": 2.90,
         "pause_ratio": 0.245,
-        "formant_centralization_ratio": 1.182,
+        "formant_compression_index": 1.182,
         "vocal_jitter_pct": 2.45,
         "vocal_shimmer_pct": 4.10,
         "mean_f0_hz": 124.50,
         "attention_entropy": 0.8124,
     }
     bio_res = mgr.log_biomarkers(session_id=session_id, biomarkers=mock_biomarkers)
-    print(f" [+] Biomarkers recorded in PostgreSQL: Jitter: {bio_res['vocal_jitter_pct']}% | FCR: {bio_res['formant_centralization_ratio']} | Artic: {bio_res['articulation_velocity']} syl/s")
+    print(f" [+] Biomarkers recorded in PostgreSQL: Jitter: {bio_res['vocal_jitter_pct']}% | Compression idx: {bio_res['formant_compression_index']} | Artic: {bio_res['articulation_velocity']} syl/s")
 
     # 7. Finalize Session
     print("\n[Step 7] Finalizing Therapy Session Summary...")

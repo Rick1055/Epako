@@ -108,22 +108,16 @@ def generate_acoustic_charts(metrics: Dict[str, Any], history: Optional[List[Dic
     norm_f1 = [280, 750, 320, 280]
     norm_f2 = [2250, 1250, 850, 2250]
 
-    # Dysarthric compressed vowel space (centralized toward 500 Hz / 1500 Hz)
-    fcr = float(metrics["formant_centralization_ratio"])
-    scale = max(0.45, 1.0 / (fcr if fcr > 0 else 1.15))
-    
-    center_f1 = 450
-    center_f2 = 1450
-    dys_f1 = [center_f1 + (y - center_f1) * scale for y in norm_f1]
-    dys_f2 = [center_f2 + (x - center_f2) * scale for x in norm_f2]
-
     # Plot Normative Triangle (Dotted Matcha)
     ax1.plot(norm_f2, norm_f1, color="#46734C", linestyle="--", linewidth=1.1, label="Normative Target", alpha=0.7)
     ax1.scatter(norm_f2[:-1], norm_f1[:-1], color="#46734C", s=24, zorder=5)
 
-    # Plot Patient Compressed Space (Solid Warm Terracotta)
-    ax1.plot(dys_f2, dys_f1, color="#D87D65", linewidth=1.6, label="Schematic (scaled from FCR)")
-    ax1.scatter(dys_f2[:-1], dys_f1[:-1], color="#D87D65", s=28, zorder=6)
+    # Measured patient F1/F2 scatter: mean +/- 1 SD over voiced frames (Solid Warm Terracotta)
+    if metrics["formant_compression_index"] is None:
+        ax1.text(0.5, 0.5, "No result (too little voiced audio)", ha="center", va="center", transform=ax1.transAxes, fontsize=7, color="#383D36")
+    else:
+        ax1.add_patch(patches.Ellipse((metrics["mean_f2"], metrics["mean_f1"]), 2 * metrics["f2_dispersion"], 2 * metrics["f1_dispersion"], fill=False, edgecolor="#D87D65", linewidth=1.6, label="Patient (mean ± 1 SD)"))
+        ax1.scatter([metrics["mean_f2"]], [metrics["mean_f1"]], color="#D87D65", s=28, zorder=6)
 
     # Annotate Vowel Anchors
     vowels = ["/i/", "/a/", "/u/"]
@@ -186,7 +180,7 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
     Parameters:
     - report_data: Structured clinical dictionary containing:
         - patient: Dict with name, id, age, condition, clinician, clinic_name, date, cpt_codes
-        - biomarkers: Dict with velocity, pause_ratio, jitter, shimmer, fcr, f0, stability
+        - biomarkers: Dict with velocity, pause_ratio, jitter, shimmer, formant_compression_index, f0, stability
         - utterances: List of dicts with original_text, repaired_text, latency_ms
         - slp_assessment: Dict with impression, recommendation, exercises, frequency
         - history: Optional longitudinal trend items
@@ -393,7 +387,7 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
     pause_ratio = float(bio["pause_ratio"]) * 100
     jitter = float(bio["vocal_jitter_pct"])
     shimmer = float(bio["vocal_shimmer_pct"])
-    fcr = float(bio["formant_centralization_ratio"])
+    cmp_idx = bio["formant_compression_index"]
     f0 = float(bio["mean_f0_hz"])
     stability = float(bio["stability_index"])
 
@@ -411,11 +405,6 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
         if j <= 1.04: return Paragraph("Normative", clinical_highlight_style)
         if j <= 2.5: return Paragraph("Mild Tremor", table_cell_center)
         return Paragraph("Ataxic Perturbation", alert_style)
-
-    def fcr_status(f):
-        if f <= 1.05: return Paragraph("Normative", clinical_highlight_style)
-        if f <= 1.20: return Paragraph("Mild Centralization", table_cell_center)
-        return Paragraph("Severe Flattening", alert_style)
 
     biomarker_rows = [
         [
@@ -449,10 +438,10 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
             Paragraph("Normative" if shimmer < 3.81 else "Elevated", table_cell_center),
         ],
         [
-            Paragraph("<b>Formant Centralization Ratio (FCR)</b>", table_cell_style),
-            Paragraph(f"<b>{fcr:.3f}</b>", table_cell_center),
-            Paragraph("0.850 - 1.020", table_cell_center),
-            fcr_status(fcr),
+            Paragraph("<b>Formant Compression Index</b> (pooled F1/F2 scatter)", table_cell_style),
+            Paragraph("<b>no result</b>" if cmp_idx is None else f"<b>{float(cmp_idx):.3f}</b>", table_cell_center),
+            Paragraph("No clinical norm", table_cell_center),
+            Paragraph("Not normed", table_cell_center),
         ],
         [
             Paragraph("<b>Composite Vocal Stability Score</b>", table_cell_style),

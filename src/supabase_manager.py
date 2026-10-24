@@ -320,7 +320,7 @@ class SupabaseManager:
             "articulation_velocity": round(float(biomarkers.get("articulation_velocity", 0.0)), 2),
             "speaking_rate": round(float(biomarkers.get("speaking_rate", 0.0)),2),
             "pause_ratio": round(float(biomarkers.get("pause_ratio", 0.0)),3),
-            "formant_centralization_ratio": round(float(biomarkers.get("formant_centralization_ratio") or  biomarkers.get("fcr", 0.0)), 3),
+            "formant_compression_index": None if biomarkers.get("formant_compression_index") is None else round(float(biomarkers["formant_compression_index"]), 3),
             "vocal_jitter_pct": round(float(biomarkers.get("vocal_jitter_pct") or biomarkers.get("jitter_percent", 0.0)), 2),
             "vocal_shimmer_pct":  round(float(biomarkers.get("vocal_shimmer_pct") or biomarkers.get("shimmer_percent", 0.0)), 2),
             "mean_f0_hz": round(float(biomarkers.get("mean_f0_hz") or biomarkers.get("mean_f0", 0.0)),2),

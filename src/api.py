@@ -345,7 +345,7 @@ async def extract_clinical_biomarkers(file: UploadFile = File(...)):
         )
         results["velocity"] = compute_articulation_velocity(audio, sample_rate=16000)
         results["instability"] = compute_phonatory_instability(audio, sample_rate=16000)
-        results["fcr"] = compute_formant_centralization(audio, sample_rate=16000)
+        results["formant_compression"] = compute_formant_centralization(audio, sample_rate=16000)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Biomarker engine unavailable: {e}")
 

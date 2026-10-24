@@ -1,4 +1,5 @@
 import os
+import re
 import json
 from datetime import datetime
 import numpy as np
@@ -6,6 +7,8 @@ import soundfile
 
 class FeedbackEngine():
     def __init__(self, patient_id="patient__001", storage_dir = "data/patient_profiles"):
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", patient_id):
+            raise ValueError(f"Invalid patient_id: {patient_id!r}")
         self.patient_id = patient_id
 
         self.base_dir =os.path.join(storage_dir, self.patient_id)
@@ -129,9 +132,11 @@ class FeedbackEngine():
                         entry["is_adapted"] = True
                     updated_entries.append(entry)
 
-        with open(self.history_file, mode="w", encoding="utf-8") as f:
+        tmp_file = self.history_file + ".tmp"
+        with open(tmp_file, mode="w", encoding="utf-8") as f:
             for entry in updated_entries:
                 f.write(json.dumps(entry) + "\n")
+        os.replace(tmp_file, self.history_file)
 
         self.stats["pending_adaption_count"] = max(0, self.stats["pending_adaption_count"]-len(adapted_utterance_ids))
         self._save_stats()

@@ -58,31 +58,27 @@ app.add_middleware(
 # Lazy-Loaded Model Singletons (Ensures instant API startup < 500ms)
 # ---------------------------------------------------------------------------
 _asr_engine = None
-_repair_engine = None
 _restoration_engine = None
 _ASR_LOAD_LOCK = threading.Lock()
 
 
-def get_repair_engine():
-    global _repair_engine
-    if _repair_engine is None:
-        try:
-            from intent_repair import IntentRepair
-            _repair_engine = IntentRepair()
-            print("[+] IntentRepair engine loaded.")
-        except Exception as e:
-            print(f"[!] Warning: Could not load IntentRepair: {e}")
-            class FallbackRepair:
-                def repair(self, text):
-                    import re
-                    cleaned = re.sub(r'\b(\w+)(?:\s+\1\b)+', r'\1', text, flags=re.IGNORECASE).strip()
-                    if cleaned:
-                        cleaned = cleaned[0].upper() + cleaned[1:]
-                        if cleaned[-1] not in ".!?":
-                            cleaned += "."
-                    return {"original_text": text, "repaired_text": cleaned, "latency_ms": 2.0}
-            _repair_engine = FallbackRepair()
-    return _repair_engine
+def get_repair_engine(patient_id):
+    try:
+        from feedback_engine import FeedbackEngine
+        from intent_repair import IntentRepair
+        return IntentRepair(feedback_engine=FeedbackEngine(patient_id=patient_id))
+    except Exception as e:
+        print(f"[!] Warning: Could not load IntentRepair: {e}")
+        class FallbackRepair:
+            def repair(self, text):
+                import re
+                cleaned = re.sub(r'(\w+)(?:\s+)+', r'', text, flags=re.IGNORECASE).strip()
+                if cleaned:
+                    cleaned = cleaned[0].upper() + cleaned[1:]
+                    if cleaned[-1] not in ".!?":
+                        cleaned += "."
+                return {"original_text": text, "repaired_text": cleaned, "latency_ms": 2.0}
+        return FallbackRepair()
 
 
 def get_restoration_engine():
@@ -253,10 +249,11 @@ def health_check():
     }
 
 
-@app.post("/api/rectify", dependencies=[Depends(require_user)])
+@app.post("/api/rectify")
 async def rectify_speech(
     request: Request,
     file: Optional[UploadFile] = File(None),
+    user=Depends(require_user),
 ):
     """
     Core Biological Voice Rectification Pipeline:
@@ -314,7 +311,7 @@ async def rectify_speech(
     asr_latency = asr_res.get("latency_ms", 0.0)
 
     # 2. Intent & Dysfluency Repair
-    repair_eng = get_repair_engine()
+    repair_eng = get_repair_engine(user.id)
     repair_res = repair_eng.repair(raw_transcript)
     repaired_text = repair_res.get("repaired_text", raw_transcript)
     repair_latency = repair_res.get("latency_ms", 1.0)
@@ -523,7 +520,7 @@ async def websocket_speech_rectifier(websocket: WebSocket):
         auth_msg = json.loads(await asyncio.wait_for(websocket.receive_text(), timeout=10))
         if auth_msg.get("type") != "auth" or auth_msg.get("sample_rate") != 16000 or auth_msg.get("encoding") != "pcm_s16le":
             raise ValueError("first message must be auth with sample_rate 16000 and encoding pcm_s16le")
-        await asyncio.to_thread(verify_token, auth_msg.get("token") or "")
+        user = await asyncio.to_thread(verify_token, auth_msg.get("token") or "")
     except Exception:
         try:
             await websocket.close(code=1008)
@@ -600,7 +597,7 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                 asr_res = await asyncio.to_thread(asr.transcribe, utterance_audio, sample_rate=16000)
                 raw_text = asr_res.get("text", "")
 
-                repair = get_repair_engine()
+                repair = get_repair_engine(user.id)
                 repaired = repair.repair(raw_text).get("repaired_text", raw_text)
 
                 if repaired:

@@ -53,7 +53,6 @@ app.add_middleware(
 _asr_engine = None
 _repair_engine = None
 _restoration_engine = None
-_supabase_mgr = None
 
 
 def get_repair_engine():
@@ -101,18 +100,6 @@ def get_asr_engine():
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Speech recognizer unavailable: {e}")
     return _asr_engine
-
-
-def get_supabase_manager():
-    global _supabase_mgr
-    if _supabase_mgr is None:
-        try:
-            from supabase_manager import SupabaseManager
-            _supabase_mgr = SupabaseManager()
-        except Exception as e:
-            print(f"[!] Supabase not connected: {e}")
-            _supabase_mgr = None
-    return _supabase_mgr
 
 
 # ---------------------------------------------------------------------------

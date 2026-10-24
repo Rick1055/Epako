@@ -14,7 +14,7 @@ class SupabaseManager:
 
         load_dotenv()
 
-        self.url = (supabase_url or os.getenv("SUPABASE_URL")).strip().rstrip("/")
+        self.url = (supabase_url or os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
 
         if use_service_role:
             self.key = (supabase_key or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY") or "").strip()
@@ -62,14 +62,9 @@ class SupabaseManager:
             raise RuntimeError(f"Sign-up failed: {response}")
 
         self.current_user = response.user
-        self.current_profile = self._fetch_or_create_profile(
-            user_id = response.user.id,
-            email = email,
-            full_name = full_name,
-            condition_type =condition_type,
-        )
+        self.current_profile = self.get_profile(refresh=True) if response.session else None
 
-        print(f"[+] Patient registered successfully: {email} (ID: {self.current_profile.get('id')})")
+        print(f"[+] Patient registered successfully: {email} (ID: {response.user.id})")
         return {"user": self.current_user, "profile": self.current_profile}
 
     def sign_in(self, email: str, password: str) -> Dict[str, Any]:
@@ -235,14 +230,11 @@ class SupabaseManager:
                 f"Unsupported audio type: {type(audio_data)}"
             )
 
-        try:
-            self.client.storage.from_(self.bucket_name).upload(
-                path=remote_path,
-                file=file_bytes,
-                file_options = {"content-type": "audio/wav", "upsert": "true"},
-            )
-        except Exception as e:
-            print(f"[!] Storage upload notice: {e}")
+        self.client.storage.from_(self.bucket_name).upload(
+            path=remote_path,
+            file=file_bytes,
+            file_options = {"content-type": "audio/wav", "upsert": "true"},
+        )
 
         return remote_path
 

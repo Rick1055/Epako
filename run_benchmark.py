@@ -26,7 +26,6 @@ from biomarker_engine import (
     compute_phonatory_instability,
     compute_formant_centralization,
 )
-import edge_tts
 
 
 # ---------------------------------------------------------------------------
@@ -66,14 +65,8 @@ def compute_wer(reference: str, hypothesis: str) -> float:
 # ---------------------------------------------------------------------------
 async def generate_clean_baseline_audio(phrase: str, output_path: str = "benchmark_clean.wav"):
     """Generates clean human speech audio for controlled baseline testing."""
-    comm = edge_tts.Communicate(phrase, "en-US-GuyNeural")
-    await comm.save(output_path)
-    audio, sr = sf.read(output_path, dtype="float32")
-    if audio.ndim > 1:
-        audio = np.mean(audio, axis=1)
-    if sr != 16000:
-        audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
-        sr = 16000
+    result = await asyncio.to_thread(local_tts.synthesize, phrase)
+    audio, sr = result["audio"], result["sample_rate"]
     sf.write(output_path, audio, sr)
     return audio, sr
 

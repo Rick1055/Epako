@@ -1,11 +1,14 @@
 import os
 import time
-import asyncio
 import torch
 import numpy as np
 import librosa
 import soundfile
-import edge_tts
+
+try:
+    from . import local_tts
+except ImportError:
+    import local_tts
 
 
 class VoiceRestorationEngine:
@@ -20,12 +23,12 @@ class VoiceRestorationEngine:
     def __init__(self, sample_rate: int = 16000):
         self.sample_rate = sample_rate
         self.voice_palette = {
-            "male_deep_gruff": "en-US-ChristopherNeural",
-            "male_smooth_warm": "en-US-GuyNeural",
-            "male_gentle": "en-US-AndrewNeural",
-            "female_clear_bright": "en-US-JennyNeural",
-            "female_warm_gentle": "en-US-AriaNeural",
-            "female_authoritative": "en-GB-SoniaNeural",
+            "male_deep_gruff": "en_US-joe-medium",
+            "male_smooth_warm": "en_US-ryan-medium",
+            "male_gentle": "en_US-kusal-medium",
+            "female_clear_bright": "en_US-amy-medium",
+            "female_warm_gentle": "en_US-lessac-medium",
+            "female_authoritative": "en_GB-alba-medium",
         }
 
     def analyze_speaker_profile(self, audio, sample_rate: int = 16000):
@@ -56,24 +59,18 @@ class VoiceRestorationEngine:
     def synthesize(
         self,
         text: str,
-        voice: str = "en-US-JennyNeural",
+        voice: str = "en_US-amy-medium",
         output_path: str = "restored_output.wav",
         pitch: str = "+0Hz",
         rate: str = "+0%",
         volume: str = "+0%",
     ):
         """
-        Synthesizes text into high-fidelity studio audio using neural vocoding with modulated delivery.
+        Synthesizes text on-device (Piper) with modulated delivery.
         """
-        start_time = time.time()
-
-        async def _generate():
-            communicate = edge_tts.Communicate(text, voice, pitch=pitch, rate=rate, volume=volume)
-            await communicate.save(output_path)
-
-        asyncio.run(_generate())
-        audio, sr = librosa.load(output_path, sr=self.sample_rate)
-        latency_ms = (time.time() - start_time) * 1000.0
+        result = local_tts.synthesize(text, voice, pitch, rate, volume, sample_rate=self.sample_rate)
+        audio, sr, latency_ms = result["audio"], result["sample_rate"], result["latency_ms"]
+        soundfile.write(output_path, audio, sr)
 
         return {
             "audio": audio,
@@ -223,7 +220,7 @@ class VoiceRestorationEngine:
         """
         return self.synthesize(
             text=text,
-            voice=profile.get("voice_id", "en-US-JennyNeural"),
+            voice=profile.get("voice_id", "en_US-amy-medium"),
             output_path=output_path,
             pitch=profile.get("pitch", "+0Hz"),
             rate=profile.get("rate", "+0%"),

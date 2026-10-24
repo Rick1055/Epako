@@ -26,7 +26,7 @@ import librosa
 import soundfile as sf
 import edge_tts
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Query, Request, Response
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Query, Request, Response, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -38,12 +38,17 @@ app = FastAPI(
     title="Epako Voice AI API",
     description="Compassionate Biological Speech Restoration & Clinical Telemetry Gateway",
     version="1.0.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
-# CORS Middleware - allows frontend from localhost, Manus, Framer, or Vercel
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+# CORS Middleware - origins come from CORS_ALLOWED_ORIGINS (comma-separated); default is none
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -104,6 +109,28 @@ def get_asr_engine():
             except Exception as e:
                 raise HTTPException(status_code=503, detail=f"Speech recognizer unavailable: {e}")
         return _asr_engine
+
+
+def verify_token(token: str):
+    try:
+        from supabase_manager import SupabaseManager
+        client = SupabaseManager().client
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Auth unavailable: {e}")
+    try:
+        res = client.auth.get_user(token)
+    except Exception:
+        res = None
+    if not res or not res.user:
+        raise HTTPException(status_code=401, detail="Invalid or missing token")
+    return res.user
+
+
+async def require_user(authorization: Optional[str] = Header(None)):
+    scheme, _, token = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    return await asyncio.to_thread(verify_token, token)
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +253,7 @@ def health_check():
     }
 
 
-@app.post("/api/rectify")
+@app.post("/api/rectify", dependencies=[Depends(require_user)])
 async def rectify_speech(
     request: Request,
     file: Optional[UploadFile] = File(None),
@@ -241,6 +268,9 @@ async def rectify_speech(
     pitch_hz = 0
     rate_pct = 0
     warmth_pct = 68
+
+    if int(request.headers.get("content-length") or 0) > 2 * _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Upload too large.")
 
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:
@@ -268,6 +298,8 @@ async def rectify_speech(
         except Exception:
             pass
 
+    if raw_bytes and len(raw_bytes) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Upload too large.")
     if not raw_bytes:
         raise HTTPException(status_code=400, detail="Missing audio payload. Provide audio file or audio_base64.")
 
@@ -334,13 +366,15 @@ async def rectify_speech(
     }
 
 
-@app.post("/api/biomarkers")
+@app.post("/api/biomarkers", dependencies=[Depends(require_user)])
 async def extract_clinical_biomarkers(file: UploadFile = File(...)):
     """
     Speech Gym: Extracts deep objective clinical biomarkers from speech audio.
     Used for SLP longitudinal tracking and patient practice monitoring.
     """
-    raw_bytes = await file.read()
+    raw_bytes = await file.read(_MAX_UPLOAD_BYTES + 1)
+    if len(raw_bytes) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Upload too large.")
     audio = await asyncio.to_thread(decode_audio_bytes, raw_bytes, target_sr=16000)
 
     results = {}
@@ -359,7 +393,7 @@ async def extract_clinical_biomarkers(file: UploadFile = File(...)):
     return {"success": True, "biomarkers": results}
 
 
-@app.post("/api/voice/sculpt")
+@app.post("/api/voice/sculpt", dependencies=[Depends(require_user)])
 async def sculpt_voice_timbre(request: VoiceSculptRequest):
     """
     Voice Identity Studio: Real-time preview of sculpted voice parameters.
@@ -393,7 +427,7 @@ async def sculpt_voice_timbre(request: VoiceSculptRequest):
     }
 
 
-@app.post("/api/voice/bank")
+@app.post("/api/voice/bank", dependencies=[Depends(require_user)])
 async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
     """
     Pre-Morbid Voice Banking: Reconstructs biological timbre from historical voice recordings.
@@ -404,11 +438,13 @@ async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
     restoration_eng = await asyncio.to_thread(get_restoration_engine)
     temp_paths = []
     try:
-        for idx, f in enumerate(files):
-            tmp_path = f"temp_note_{idx}_{f.filename}"
-            with open(tmp_path, "wb") as buffer:
-                buffer.write(await f.read())
-            temp_paths.append(tmp_path)
+        for f in files:
+            data = await f.read(_MAX_UPLOAD_BYTES + 1)
+            if len(data) > _MAX_UPLOAD_BYTES:
+                raise HTTPException(status_code=413, detail="Upload too large.")
+            with tempfile.NamedTemporaryFile(suffix=os.path.splitext(os.path.basename(f.filename or ""))[1], delete=False) as buffer:
+                buffer.write(data)
+                temp_paths.append(buffer.name)
 
         profile = await asyncio.to_thread(restoration_eng.create_profile_from_voice_notes, temp_paths, min_notes=2)
         return {
@@ -428,7 +464,7 @@ async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
 # ---------------------------------------------------------------------------
 # Clinical PDF Evaluation Report Generator (SLP / Insurance CPT Reimbursement)
 # ---------------------------------------------------------------------------
-@app.post("/api/session/report/pdf")
+@app.post("/api/session/report/pdf", dependencies=[Depends(require_user)])
 def create_clinical_pdf_report(req: ClinicalPdfReportRequest):
     """
     Generates an authoritative, 1-page publication-grade Clinical SLP Evaluation Report PDF.
@@ -483,6 +519,17 @@ async def websocket_speech_rectifier(websocket: WebSocket):
     emits the rectified audio stream when a pause is detected.
     """
     await websocket.accept()
+    try:
+        auth_msg = json.loads(await asyncio.wait_for(websocket.receive_text(), timeout=10))
+        if auth_msg.get("type") != "auth":
+            raise ValueError("first message must be auth")
+        await asyncio.to_thread(verify_token, auth_msg.get("token") or "")
+    except Exception:
+        try:
+            await websocket.close(code=1008)
+        except Exception:
+            pass
+        return
     print("[+] WebSocket client connected to /ws/rectify")
 
     audio_buffer = []

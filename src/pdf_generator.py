@@ -15,6 +15,7 @@ import io
 import time
 import functools
 import threading
+from xml.sax.saxutils import escape
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
 
@@ -320,14 +321,14 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
     header_table_data = [
         [
             Paragraph("<b>EPAKO VOICE AI</b>  |  CLINICAL SPEECH RESTORATION", ParagraphStyle("Brand", fontName="Helvetica-Bold", fontSize=10, leading=12, textColor=COLOR_CELADON)),
-            Paragraph(f"<b>Date:</b> {eval_date}", ParagraphStyle("DateRight", fontName="Helvetica", fontSize=7.5, leading=9, textColor=COLOR_SLATE, alignment=TA_RIGHT))
+            Paragraph(f"<b>Date:</b> {escape(str(eval_date))}", ParagraphStyle("DateRight", fontName="Helvetica", fontSize=7.5, leading=9, textColor=COLOR_SLATE, alignment=TA_RIGHT))
         ],
         [
             Paragraph("Clinical Speech &amp; Neuromotor Acoustic Evaluation", title_style),
-            Paragraph(f"<b>Session Code:</b> {session_id}", ParagraphStyle("CodeRight", fontName="Helvetica", fontSize=7.5, leading=9, textColor=COLOR_SLATE, alignment=TA_RIGHT))
+            Paragraph(f"<b>Session Code:</b> {escape(str(session_id))}", ParagraphStyle("CodeRight", fontName="Helvetica", fontSize=7.5, leading=9, textColor=COLOR_SLATE, alignment=TA_RIGHT))
         ],
         [
-            Paragraph(f"Objective Telemetry Protocol for Speech-Language Pathologists  |  {clinic_name}", subtitle_style),
+            Paragraph(f"Objective Telemetry Protocol for Speech-Language Pathologists  |  {escape(str(clinic_name))}", subtitle_style),
             ""
         ]
     ]
@@ -355,15 +356,15 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
     patient_grid_data = [
         [
             Paragraph("<b>Patient Name:</b>", bold_label_style),
-            Paragraph(patient_name, body_style),
+            Paragraph(escape(str(patient_name)), body_style),
             Paragraph("<b>Medical Record:</b>", bold_label_style),
-            Paragraph(patient_id, body_style),
+            Paragraph(escape(str(patient_id)), body_style),
         ],
         [
             Paragraph("<b>Attending SLP:</b>", bold_label_style),
-            Paragraph(clinician, body_style),
+            Paragraph(escape(str(clinician)), body_style),
             Paragraph("<b>Pathology Protocol:</b>", bold_label_style),
-            Paragraph(condition, body_style),
+            Paragraph(escape(str(condition)), body_style),
         ]
     ]
 
@@ -498,8 +499,8 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
 
     for u in utterances[:2]:
         utt_rows.append([
-            Paragraph(f'<i>"{u["original_text"]}"</i>', table_cell_style),
-            Paragraph(f'<b>"{u["repaired_text"]}"</b>', table_cell_style),
+            Paragraph(f'<i>"{escape(str(u["original_text"]))}"</i>', table_cell_style),
+            Paragraph(f'<b>"{escape(str(u["repaired_text"]))}"</b>', table_cell_style),
             Paragraph(f"{u['latency_ms']:.1f} ms", table_cell_center),
         ])
 
@@ -531,15 +532,15 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
     plan_table_data = [
         [
             Paragraph("<b>Clinical Impression:</b>", bold_label_style),
-            Paragraph(impression, body_style)
+            Paragraph(escape(str(impression)), body_style)
         ],
         [
             Paragraph("<b>Home Regimen:</b>", bold_label_style),
-            Paragraph(home_plan, body_style)
+            Paragraph(escape(str(home_plan)), body_style)
         ],
         [
             Paragraph("<b>Prescription:</b>", bold_label_style),
-            Paragraph(freq, body_style)
+            Paragraph(escape(str(freq)), body_style)
         ]
     ]
 
@@ -562,7 +563,7 @@ def generate_clinical_pdf(report_data: Dict[str, Any], output_path: Optional[str
     # ---------------------------------------------------------------------------
     sig_data = [
         [
-            Paragraph(f"<b>Attending Clinician:</b> {clinician}", body_style),
+            Paragraph(f"<b>Attending Clinician:</b> {escape(str(clinician))}", body_style),
             Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}", ParagraphStyle("TimeRight", fontName="Helvetica", fontSize=6.5, leading=8, textColor=COLOR_SLATE, alignment=TA_RIGHT))
         ]
     ]

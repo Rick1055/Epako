@@ -62,11 +62,11 @@ def db(server_and_template):
     for uid, mail in ((PA, "a"), (PB, "b"), (DC, "dc"), (DU, "du"), (DE, "de")):
         d.q(None, None, "insert into auth.users(id, email) values (%s, %s)", (uid, mail))
     d.pid = {u: d.q(None, None, "select id from patient_profiles where user_id=%s", (u,))[0][0] for u in (PA, PB)}
-    d.sess = {u: d.q("authenticated", u, "insert into therapy_sessions(patient_id) values (%s) returning id",
+    d.sess = {u: d.q("service_role", None, "insert into therapy_sessions(patient_id) values (%s) returning id",
                      (d.pid[u],))[0][0] for u in (PA, PB)}
     d.q("service_role", None, "insert into biomarker_logs(session_id, patient_id, articulation_velocity, stability_index) "
         "values (%s, %s, 3.0, 90)", (d.sess[PA], d.pid[PA]))
-    d.q("authenticated", PA, "insert into session_utterances(session_id, patient_id, transcribed_text) values (%s, %s, 'hi')",
+    d.q("service_role", None, "insert into session_utterances(session_id, patient_id, transcribed_text) values (%s, %s, 'hi')",
         (d.sess[PA], d.pid[PA]))
     for u in (DC, DU, DE):
         d.q("authenticated", u, "insert into clinicians(user_id, display_name) values (%s, 'Dr')", (u,))
@@ -74,9 +74,13 @@ def db(server_and_template):
     return d
 
 
+def redeem(db, who, code):
+    return db.q("authenticated", who, "select redeem_link_code(%s)", (code,))[0][0]
+
+
 def link(db, clinician=DC, patient=PA):
     code = db.q("authenticated", patient, "select create_link_code()")[0][0]
-    db.q("authenticated", clinician, "select redeem_link_code(%s)", (code,))
+    assert redeem(db, clinician, code) is True
     return code
 
 
@@ -100,7 +104,7 @@ def test_anon_sees_nothing(db, table):
 def test_patient_isolation(db):
     assert len(db.q("authenticated", PA, "select * from patient_profiles")) == 1
     assert db.q("authenticated", PA, "select * from therapy_sessions where id=%s", (db.sess[PB],)) == []
-    denied(db, "authenticated", PA, "insert into therapy_sessions(patient_id) values (%s)", (db.pid[PB],), "row-level security")
+    denied(db, "authenticated", PA, "insert into therapy_sessions(patient_id) values (%s)", (db.pid[PB],), "permission denied")
     assert db.q("authenticated", PA, "update patient_profiles set voice_profile='{}' where id=%s", (db.pid[PB],)) == 0
 
 
@@ -112,10 +116,20 @@ def test_biomarkers_are_server_write_only(db):
     assert db.q("authenticated", PB, "select * from biomarker_logs") == []
 
 
-def test_cannot_attach_utterance_to_someone_elses_session(db):
-    denied(db, "authenticated", PA,
-           "insert into session_utterances(session_id, patient_id, transcribed_text) values (%s, %s, 'planted')",
-           (db.sess[PB], db.pid[PA]), "row-level security")
+def test_patients_cannot_write_scores_or_answers(db):
+    for sql, params in (
+        ("insert into therapy_sessions(patient_id, accuracy_rate) values (%s, 100)", (db.pid[PA],)),
+        ("update therapy_sessions set accuracy_rate = 100", ()),
+        ("delete from therapy_sessions", ()),
+        ("insert into session_utterances(session_id, patient_id, transcribed_text) values (%s, %s, 'x')", (db.sess[PA], db.pid[PA])),
+        ("insert into session_utterances(session_id, patient_id, transcribed_text) values (%s, %s, 'planted')", (db.sess[PB], db.pid[PA])),
+        ("update session_utterances set confirmed = true", ()),
+        ("delete from session_utterances", ()),
+    ):
+        denied(db, "authenticated", PA, sql, params, "permission denied")
+    assert len(db.q("authenticated", PA, "select * from therapy_sessions")) == 1       # still readable
+    assert len(db.q("authenticated", PA, "select * from session_utterances")) == 1
+    assert db.q("service_role", None, "update therapy_sessions set accuracy_rate = 80 where id = %s", (db.sess[PA],)) == 1
 
 
 def test_clinician_cannot_self_verify(db):
@@ -128,14 +142,13 @@ def test_link_code_flow_and_failures(db):
     code = db.q("authenticated", PA, "select create_link_code()")[0][0]
     assert len(code) == 10
     assert db.q(None, None, "select count(*) from link_codes where code_hash = %s or code_hash like %s", (code, code + "%")) == [(0,)]  # only a hash is stored
-    bad = "Invalid or expired code"
-    denied(db, "authenticated", DU, "select redeem_link_code(%s)", (code,), bad)       # unverified
-    denied(db, "authenticated", DC, "select redeem_link_code('WRONGCODE0')", msg=bad)   # wrong
-    db.q("authenticated", DC, "select redeem_link_code(%s)", (code.lower(),))           # case-insensitive
-    denied(db, "authenticated", DE, "select redeem_link_code(%s)", (code,), bad)       # reuse
+    assert redeem(db, DU, code) is False             # unverified
+    assert redeem(db, DC, "WRONGCODE0") is False     # wrong
+    assert redeem(db, DC, code.lower()) is True      # case-insensitive
+    assert redeem(db, DE, code) is False             # reuse
     code2 = db.q("authenticated", PA, "select create_link_code()")[0][0]
     db.q(None, None, "update link_codes set expires_at = now() - interval '1 minute'")
-    denied(db, "authenticated", DE, "select redeem_link_code(%s)", (code2,), bad)      # expired
+    assert redeem(db, DE, code2) is False            # expired
     denied(db, "authenticated", PA, "select * from link_codes", msg="permission denied")
     denied(db, "authenticated", PA, "insert into link_codes values ('x', %s, now(), null)", (db.pid[PA],), "permission denied")
 
@@ -143,7 +156,7 @@ def test_link_code_flow_and_failures(db):
 def test_new_code_replaces_old(db):
     old = db.q("authenticated", PA, "select create_link_code()")[0][0]
     db.q("authenticated", PA, "select create_link_code()")
-    denied(db, "authenticated", DC, "select redeem_link_code(%s)", (old,), "Invalid or expired code")
+    assert redeem(db, DC, old) is False
 
 
 def test_grants_cannot_be_made_directly(db):
@@ -158,8 +171,8 @@ def test_clinician_reads_only_granted_patient_and_never_writes(db):
     assert len(db.q("authenticated", DC, "select * from biomarker_logs")) == 1
     assert len(db.q("authenticated", DC, "select * from session_utterances")) == 1
     denied(db, "authenticated", DC, "insert into session_utterances(session_id, patient_id, transcribed_text) values (%s, %s, 'x')",
-           (db.sess[PA], db.pid[PA]), "row-level security")
-    assert db.q("authenticated", DC, "update therapy_sessions set accuracy_rate = 100") == 0
+           (db.sess[PA], db.pid[PA]), "permission denied")
+    denied(db, "authenticated", DC, "update therapy_sessions set accuracy_rate = 100", msg="permission denied")
     assert db.q("authenticated", DC, "select user_id from patient_profiles") == [(DC,)]  # only their own (empty) profile
 
 
@@ -224,3 +237,35 @@ def test_deleting_a_patient_erases_everything_but_a_clinician_with_assessments_i
                             ("clinician_access", "patient_id", pid), ("clinical_assessments", "session_id", sid)):
         assert db.q(None, None, f"select count(*) from {table} where {col} = %s", (val,)) == [(0,)], table
     assert db.q(None, None, "select count(*) from clinicians where user_id = %s", (DC,)) == [(1,)]
+
+
+def test_five_wrong_guesses_lock_the_clinician_out(db):
+    code = db.q("authenticated", PA, "select create_link_code()")[0][0]
+    for i in range(5):
+        assert redeem(db, DC, f"BADGUESS{i}0") is False
+    assert redeem(db, DC, code) is False                 # locked, even with the right code
+    assert redeem(db, DE, code) is True                  # other clinicians are unaffected
+    db.q(None, None, "update link_attempts set at = now() - interval '16 minutes'")
+    code_b = db.q("authenticated", PB, "select create_link_code()")[0][0]
+    assert redeem(db, DC, code_b) is True                # the lock expires
+    denied(db, "authenticated", DC, "select * from link_attempts", msg="permission denied")
+
+
+def test_rate_limit_function_is_server_only_and_counts(db):
+    call = "select rate_limit_hit('x', %s, 2, 60)"
+    assert [db.q("service_role", None, call, (PA,))[0][0] for _ in range(3)] == [True, True, False]
+    assert db.q("service_role", None, call, (PB,)) == [(True,)]          # per user
+    db.q(None, None, "update rate_hits set at = now() - interval '2 minutes'")
+    assert db.q("service_role", None, call, (PA,)) == [(True,)]          # the window slid
+    denied(db, "authenticated", PA, call, (PA,), "permission denied")
+    denied(db, "anon", None, call, (PA,), "permission denied")
+    denied(db, "authenticated", PA, "select * from rate_hits", msg="permission denied")
+
+
+def test_verification_changes_are_audited(db):
+    db.q(None, None, "update clinicians set verified = false where user_id = %s", (DC,))
+    rows = db.q(None, None, "select old_verified, new_verified, changed_by from clinician_audit where clinician_id = %s order by id", (DC,))
+    assert [(r[0], r[1]) for r in rows] == [(None, False), (False, True), (True, False)]  # registered, admin verified, admin revoked
+    assert rows[0][2] == DC and all(r[2] for r in rows)                                     # who did it is recorded
+    denied(db, "authenticated", DC, "select * from clinician_audit", msg="permission denied")
+    denied(db, "authenticated", DC, "delete from clinician_audit", msg="permission denied")

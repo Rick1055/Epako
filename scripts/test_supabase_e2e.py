@@ -13,6 +13,7 @@ Tests the entire Supabase pipeline:
 
 import sys
 import os
+import uuid
 import numpy as np
 
 # Ensure root is in python path
@@ -88,21 +89,18 @@ def run_e2e_test():
     )
     print(f" [+] Restored Audio Uploaded! Object path: {restored_url}")
 
-    # 5. Speech Gym Therapy Session & Utterance Logging
-    print("\n[Step 5] Logging Live Therapy Session & Utterances...")
-    session_id = mgr.start_therapy_session()
-
-    utt = mgr.log_utterance(
-        session_id=session_id,
-        transcribed_text="yard less",
-        corrected_text="yard loss",
-        raw_audio=test_waveform,
-        restored_audio=test_waveform,
-        confirmed=False,
-        is_adapted=True,
-        latency_ms=116.83,
-    )
-    print(f" [+] Utterance logged (ID: {utt['id']}) | Transcribed: '{utt['transcribed_text']}' -> Corrected: '{utt['corrected_text']}'")
+    # 5. Scores and answers are written by the server only
+    print("\n[Step 5] Checking patients cannot write sessions or utterances...")
+    session_id = str(uuid.uuid4())
+    for table, row in (("therapy_sessions", {"patient_id": patient_id, "accuracy_rate": 100}),
+                       ("session_utterances", {"session_id": session_id, "patient_id": patient_id, "transcribed_text": "x"})):
+        try:
+            mgr.client.table(table).insert(row).execute()
+            sys.exit(f" [!] FAIL: a client was able to write {table}")
+        except SystemExit:
+            raise
+        except Exception:
+            print(f" [+] Client write to {table} rejected (server-only), as intended.")
 
     # 6. Biomarker Telemetry Sync
     print("\n[Step 6] Checking biomarker_logs is server-write-only...")
@@ -114,20 +112,9 @@ def run_e2e_test():
         raise
     except Exception:
         print(" [+] Client write to biomarker_logs rejected (server-only table), as intended.")
-    print(f" [+] Session ID (for API_TEST_SESSION_ID): {session_id}")
 
-    # 7. Finalize Session
-    print("\n[Step 7] Finalizing Therapy Session Summary...")
-    mgr.finish_therapy_session(
-        session_id=session_id,
-        duration_seconds=45.2,
-        overall_score=88.5,
-        accuracy_rate=92.0,
-        utterances_count=1,
-    )
-
-    # 8. Query 30-Day Recovery View
-    print("\n[Step 8] Querying Clinical Recovery Trajectory (patient_daily_progress view)...")
+    # 7. Query 30-Day Recovery View
+    print("\n[Step 7] Querying Clinical Recovery Trajectory (patient_daily_progress view)...")
     trajectory = mgr.get_recovery_trajectory(limit_days=7)
     print(f" [+] Found {len(trajectory)} daily progress records for patient.")
     for entry in trajectory:

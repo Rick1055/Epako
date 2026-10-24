@@ -32,8 +32,6 @@ class SupabaseManager:
         self.current_user = None
         self.current_profile = None
 
-        print(f"[+] SupabaseManager initialized for: {self.url}")
-
     def sign_up(self, email:str, password: str) -> Dict[str, Any]:
 
         email = email.strip().lower()
@@ -211,102 +209,6 @@ class SupabaseManager:
 
         return remote_path
 
-    def start_therapy_session(self, patient_id: Optional[str] = None) -> str:
-
-        pid = patient_id or (self.current_profile["id"] if self.current_profile else None)
-        if not pid:
-            raise RuntimeError ("Cannot start Session: No authenticated profile active.")
-
-        session_data = {
-            "patient_id": pid,
-            "session_date": datetime.now().date().isoformat(),
-            "duration_seconds": 0.0,
-            "overall_score": 0.0,
-            "utterances_count": 0,
-            "accuracy_rate": 0.0,
-        }
-
-        res = self.client.table("therapy_sessions").insert(session_data).execute()
-        if not res.data:
-            raise RuntimeError("Failed to create therapy session.")
-
-        session_id = res.data[0]["id"]
-        print(f"[+] Started Therapy Session: {session_id} for patient {pid}")
-        return session_id
-
-    def log_utterance(self,
-                      session_id: str,
-                      transcribed_text: str,
-                      corrected_text: Optional[str] = None,
-                      raw_audio: Optional[Union[np.ndarray, bytes, str]] = None,
-                      restored_audio: Optional[Union[np.ndarray, bytes, str]] = None,
-                      confirmed: bool = True,
-                      is_adapted: bool = False,
-                      latency_ms: float = 0.0,
-                      patient_id: Optional[str] = None,
-                      ) -> Dict[str , Any]:
-
-        pid = patient_id or (self.current_profile["id"] if self.current_profile else None)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-
-        raw_url = None
-        if raw_audio is not None:
-            raw_url = self.upload_audio(
-                audio_data = raw_audio,
-                remote_filename=f"raw_{timestamp}.wav",
-                folder="raw",
-            )
-
-        restored_url = None
-        if restored_audio is not None:
-            restored_url = self.upload_audio(
-                audio_data=restored_audio,
-                remote_filename=f"restored_{timestamp}.wav",
-                folder="restored",
-            )
-
-        utterance_record = {
-            "session_id": session_id,
-            "patient_id": pid,
-            "raw_audio_url": raw_url,
-            "restored_audio_url": restored_url,
-            "transcribed_text": transcribed_text,
-            "corrected_text": corrected_text or transcribed_text,
-            "confirmed": confirmed,
-            "is_adapted": is_adapted,
-            "latency_ms": round(float(latency_ms), 2)
-        }
-
-        res = self.client.table("session_utterances").insert(utterance_record).execute()
-        return res.data[0] if res.data else utterance_record
-
-    def finish_therapy_session(
-            self,
-            session_id: str,
-            duration_seconds: float,
-            overall_score: float,
-            accuracy_rate: float,
-            utterances_count: Optional[int] = None,
-    ) -> Dict[str, Any]:
-
-        update_data = {
-            "duration_seconds": round(float(duration_seconds),2),
-            "overall_score": round(float(overall_score), 2),
-            "accuracy_rate": round(float(accuracy_rate), 2),
-        }
-
-        if utterances_count is not None:
-            update_data["utterances_count"] = int(utterances_count)
-
-        res = (
-            self.client.table("therapy_sessions")
-            .update(update_data)
-            .eq("id", session_id)
-            .execute()
-        )
-        print(f"[+] Finalized Session {session_id} - Score: {overall_score:.1f}% | Accuracy: {accuracy_rate:.1f}%")
-        return res.data[0] if res.data else update_data
-    
     def get_recovery_trajectory(
         self,
         patient_id: Optional[str] = None,

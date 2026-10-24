@@ -21,7 +21,6 @@ import shutil
 from datetime import datetime, timezone
 import threading
 import functools
-import collections
 import asyncio
 from typing import Optional, Dict, Any, List
 from uuid import UUID
@@ -69,9 +68,13 @@ _ASR_LOAD_LOCK = threading.Lock()
 
 
 @app.on_event("startup")
-def warm_voices():
-    """Loading a voice takes ~10 s and the first pitch shift ~3 s; do it before a patient is waiting."""
+def warm_models():
+    """The recognizer loads in ~60 s, a voice in ~10 s and the first pitch shift in ~3 s; do it before a patient is waiting."""
     def run():
+        try:
+            get_asr_engine()
+        except Exception as e:
+            print(f"[!] Recognizer warm-up failed: {e}")
         from voice_restoration import VoiceRestorationEngine
         names = dict.fromkeys([local_tts.DEFAULT_VOICE, *VoiceRestorationEngine().voice_palette.values()])
         for i, name in enumerate(names):
@@ -141,6 +144,7 @@ def user_client(token: str):
     return client
 
 
+@functools.lru_cache(maxsize=1)
 def service_client():
     """Server-only writer for tables clients may not write (biomarker_logs). Never expose this key."""
     from supabase import create_client
@@ -171,20 +175,22 @@ def _password_ok(email, password) -> bool:
         return False
 
 
-_hits = collections.defaultdict(collections.deque)
-_hits_lock = threading.Lock()
+def _reauth_ok(user, token, password) -> bool:
+    """Password accounts must re-enter the password; passwordless accounts (magic link / OAuth) must have signed in within 5 minutes."""
+    if "email" in (user.app_metadata or {}).get("providers", []):
+        return bool(password) and _password_ok(user.email, password)
+    claims = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
+    return any(time.time() - a.get("timestamp", 0) < 300 for a in claims.get("amr", []))  # time of the last real sign-in, not of a token refresh
 
 
 def hit(name: str, user_id, limit: int, per: float = 60.0) -> None:
-    """Per-user sliding-window limit. shortcut: in-process memory, so it resets on restart and is per worker; use Redis for several workers."""
-    now = time.monotonic()
-    with _hits_lock:
-        q = _hits[(name, user_id)]
-        while q and now - q[0] > per:
-            q.popleft()
-        if len(q) >= limit:
-            raise HTTPException(status_code=429, detail="Too many requests.", headers={"Retry-After": str(int(per))})
-        q.append(now)
+    """Per-user sliding-window limit kept in Postgres (rate_limit_hit), so it is shared by every worker and survives restarts."""
+    try:
+        allowed = service_client().rpc("rate_limit_hit", {"p_name": name, "p_user": str(user_id), "p_limit": limit, "p_seconds": int(per)}).execute().data
+    except Exception as e:
+        raise fail(503, "Rate limiter unavailable.", e)  # fail closed: if the database is down, auth is down too
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Too many requests.", headers={"Retry-After": str(int(per))})
 
 
 async def require_user(authorization: Optional[str] = Header(None)):
@@ -197,7 +203,7 @@ async def require_user(authorization: Optional[str] = Header(None)):
 def rate_limit(name: str, limit: int, per: float = 60.0):
     """Dependency: authenticates the caller, then applies hit()."""
     async def dep(user=Depends(require_user)):
-        hit(name, user.id, limit, per)
+        await asyncio.to_thread(hit, name, user.id, limit, per)
         return user
     return dep
 
@@ -494,7 +500,7 @@ async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
 
 class DeleteDataRequest(BaseModel):
     confirm: str
-    password: str
+    password: Optional[str] = None
 
 
 def _purge_audio(writer, uid: str) -> None:
@@ -516,7 +522,7 @@ def _purge_audio(writer, uid: str) -> None:
 
 
 @app.delete("/api/me/data")
-def delete_my_data(req: DeleteDataRequest, user=Depends(rate_limit("delete", 3, 3600))):
+def delete_my_data(req: DeleteDataRequest, authorization: str = Header(...), user=Depends(rate_limit("delete", 3, 3600))):
     """
     Permanently erases the caller's account: stored audio, local feedback data, then the auth user,
     whose deletion cascades to profile, sessions, biomarkers, utterances, grants and link codes.
@@ -524,8 +530,8 @@ def delete_my_data(req: DeleteDataRequest, user=Depends(rate_limit("delete", 3, 
     """
     if req.confirm != "DELETE":
         raise HTTPException(status_code=400, detail='Send {"confirm": "DELETE"} to proceed.')
-    if not _password_ok(user.email, req.password):
-        raise HTTPException(status_code=403, detail="Password incorrect.")
+    if not _reauth_ok(user, authorization.partition(" ")[2], req.password):
+        raise HTTPException(status_code=403, detail="Re-authentication failed.")
     uid = str(UUID(str(user.id)))  # also guards the local path below
     writer = service_client()
     try:
@@ -563,7 +569,7 @@ def start_session(authorization: str = Header(...), user=Depends(require_user)):
     prof = client.table("patient_profiles").select("id").eq("user_id", user.id).execute().data
     if not prof:
         raise HTTPException(status_code=404, detail="No patient profile.")
-    row = client.table("therapy_sessions").insert({"patient_id": prof[0]["id"]}).execute().data
+    row = service_client().table("therapy_sessions").insert({"patient_id": prof[0]["id"]}).execute().data
     return {"session_id": row[0]["id"]}
 
 
@@ -577,7 +583,7 @@ def save_utterance(session_id: UUID, req: UtteranceIn, authorization: str = Head
     table = client.table("patient_profiles").select("phonetic_corrections").eq("id", patient_id).execute().data[0]["phonetic_corrections"] or {}
     engine = FeedbackEngine(table)
     reward = engine.learn(req.raw_transcript, req.shown_text, req.final_text)
-    client.table("session_utterances").insert({
+    service_client().table("session_utterances").insert({
         "session_id": str(session_id), "patient_id": patient_id,
         "transcribed_text": req.raw_transcript, "corrected_text": req.final_text,
         "confirmed": confirmed, "latency_ms": req.latency_ms,
@@ -598,7 +604,7 @@ def finish_session(session_id: UUID, authorization: str = Header(...), user=Depe
     accuracy = 100.0 * sum(u["confirmed"] for u in utts) / len(utts) if utts else 0.0
     duration = (datetime.now(timezone.utc) - datetime.fromisoformat(started)).total_seconds()
     update = {"duration_seconds": round(duration, 2), "utterances_count": len(utts), "accuracy_rate": round(accuracy, 2)}
-    client.table("therapy_sessions").update(update).eq("id", sid).execute()
+    service_client().table("therapy_sessions").update(update).eq("id", sid).execute()
     return update
 
 
@@ -742,7 +748,7 @@ async def websocket_speech_rectifier(websocket: WebSocket):
         if auth_msg.get("type") != "auth" or auth_msg.get("sample_rate") != 16000 or auth_msg.get("encoding") != "pcm_s16le":
             raise ValueError("first message must be auth with sample_rate 16000 and encoding pcm_s16le")
         user = await asyncio.to_thread(verify_token, auth_msg.get("token") or "")
-        hit("ws", user.id, 10)
+        await asyncio.to_thread(hit, "ws", user.id, 10)
     except Exception:
         try:
             await websocket.close(code=1008)

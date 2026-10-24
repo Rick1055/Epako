@@ -14,6 +14,31 @@ from supabase_manager import SupabaseManager
 from pdf_generator import generate_clinical_pdf
 
 
+class _FakeLimiterDb:
+    """Stands in for Postgres rate_limit_hit; the real SQL is attacked in test_rls.py."""
+
+    def __init__(self):
+        self.seen = {}
+
+    def rpc(self, fn, params):
+        assert fn == "rate_limit_hit"
+        import time
+        q = self.seen.setdefault((params["p_name"], params["p_user"]), [])
+        now = time.monotonic()
+        q[:] = [t for t in q if now - t <= params["p_seconds"]]
+        allowed = len(q) < params["p_limit"]
+        if allowed:
+            q.append(now)
+        return mock.Mock(execute=lambda: mock.Mock(data=allowed))
+
+
+@pytest.fixture(autouse=True)
+def fake_limiter():
+    import api
+    with mock.patch.object(api, "service_client", return_value=_FakeLimiterDb()):
+        yield
+
+
 def repaired(text):
     return IntentRepair().repair(text)["repaired_text"]
 
@@ -100,13 +125,13 @@ def test_delete_my_data_wipes_audio_then_account():
     writer = mock.MagicMock()
     writer.storage.from_.return_value = bucket
     writer.auth.admin.delete_user.side_effect = lambda u: order.append(("delete_user", u))
-    api.app.dependency_overrides[api.require_user] = lambda: mock.Mock(id=uid, email="p@example.com")
+    api.app.dependency_overrides[api.require_user] = lambda: mock.Mock(id=uid, email="p@example.com", app_metadata={"providers": ["email"]})
     try:
         with mock.patch.object(api, "service_client", return_value=writer), mock.patch.object(api, "_password_ok", return_value=True):
             c = TestClient(api.app)
-            assert c.request("DELETE", "/api/me/data", json={"confirm": "no", "password": "pw"}).status_code == 400
+            assert c.request("DELETE", "/api/me/data", json={"confirm": "no", "password": "pw"}, headers=AUTH).status_code == 400
             assert order == []
-            assert c.request("DELETE", "/api/me/data", json={"confirm": "DELETE", "password": "pw"}).status_code == 200
+            assert c.request("DELETE", "/api/me/data", json={"confirm": "DELETE", "password": "pw"}, headers=AUTH).status_code == 200
     finally:
         api.app.dependency_overrides.clear()
     assert order == [("remove", [f"{uid}/raw/a.wav"]), ("delete_user", uid)]
@@ -190,9 +215,12 @@ def test_real_voices_speak_and_rate_changes_duration():
     assert 0.5 < fast < slow < 10
 
 
-def _as(uid):
+AUTH = {"Authorization": "Bearer t"}
+
+
+def _as(uid, providers=("email",)):
     import api
-    api.app.dependency_overrides[api.require_user] = lambda: mock.Mock(id=uid, email="p@example.com")
+    api.app.dependency_overrides[api.require_user] = lambda: mock.Mock(id=uid, email="p@example.com", app_metadata={"providers": list(providers)})
 
 
 def test_delete_requires_the_password():
@@ -202,25 +230,29 @@ def test_delete_requires_the_password():
     _as("33333333-3333-3333-3333-333333333333")
     try:
         with mock.patch.object(api, "service_client", return_value=writer), mock.patch.object(api, "_password_ok", return_value=False):
-            r = TestClient(api.app).request("DELETE", "/api/me/data", json={"confirm": "DELETE", "password": "wrong"})
+            r = TestClient(api.app).request("DELETE", "/api/me/data", json={"confirm": "DELETE", "password": "wrong"}, headers=AUTH)
     finally:
         api.app.dependency_overrides.clear()
     assert r.status_code == 403
     writer.auth.admin.delete_user.assert_not_called()
 
 
-def test_rate_limit_is_per_user_and_expires():
+def test_hit_maps_database_answers():
     import api
-    with mock.patch("api.time.monotonic") as clock:
-        clock.return_value = 0.0
-        for _ in range(3):
-            api.hit("t", "u1", 3, 60)
+    svc = mock.MagicMock()
+    result = svc.rpc.return_value.execute.return_value
+    with mock.patch.object(api, "service_client", return_value=svc):
+        result.data = True
+        api.hit("n", "u", 5, 60)
+        svc.rpc.assert_called_with("rate_limit_hit", {"p_name": "n", "p_user": "u", "p_limit": 5, "p_seconds": 60})
+        result.data = False
         with pytest.raises(api.HTTPException) as e:
-            api.hit("t", "u1", 3, 60)
+            api.hit("n", "u", 5, 60)
         assert e.value.status_code == 429
-        api.hit("t", "u2", 3, 60)   # another user is unaffected
-        clock.return_value = 61.0
-        api.hit("t", "u1", 3, 60)   # the window has passed
+        svc.rpc.return_value.execute.side_effect = RuntimeError("db down")
+        with pytest.raises(api.HTTPException) as e:
+            api.hit("n", "u", 5, 60)
+        assert e.value.status_code == 503   # fails closed
 
 
 def test_delete_is_throttled_over_http():
@@ -229,7 +261,7 @@ def test_delete_is_throttled_over_http():
     _as("44444444-4444-4444-4444-444444444444")
     try:
         c = TestClient(api.app)
-        codes = [c.request("DELETE", "/api/me/data", json={"confirm": "no", "password": "x"}).status_code for _ in range(4)]
+        codes = [c.request("DELETE", "/api/me/data", json={"confirm": "no", "password": "x"}, headers=AUTH).status_code for _ in range(4)]
     finally:
         api.app.dependency_overrides.clear()
     assert codes == [400, 400, 400, 429]
@@ -278,3 +310,35 @@ def test_websocket_rejects_bad_auth_and_oversized_chunks():
             with pytest.raises(WebSocketDisconnect) as e:
                 ws.receive_text()
             assert e.value.code == 1009
+
+
+def _jwt_with_sign_in_age(seconds_ago):
+    import base64, json, time
+    body = base64.urlsafe_b64encode(json.dumps({"amr": [{"method": "oauth", "timestamp": time.time() - seconds_ago}]}).encode()).decode().rstrip("=")
+    return f"x.{body}.y"
+
+
+def test_passwordless_accounts_need_a_fresh_sign_in_to_delete():
+    from fastapi.testclient import TestClient
+    import api
+    writer = mock.MagicMock()
+    _as("55555555-5555-5555-5555-555555555555", providers=("google",))
+    try:
+        with mock.patch.object(api, "service_client", return_value=writer):
+            stale = TestClient(api.app).request("DELETE", "/api/me/data", json={"confirm": "DELETE"}, headers={"Authorization": f"Bearer {_jwt_with_sign_in_age(3600)}"})
+            writer.auth.admin.delete_user.assert_not_called()
+            fresh = TestClient(api.app).request("DELETE", "/api/me/data", json={"confirm": "DELETE"}, headers={"Authorization": f"Bearer {_jwt_with_sign_in_age(30)}"})
+    finally:
+        api.app.dependency_overrides.clear()
+    assert stale.status_code == 403 and fresh.status_code == 200
+
+
+def test_password_accounts_cannot_skip_the_password():
+    from fastapi.testclient import TestClient
+    import api
+    _as("66666666-6666-6666-6666-666666666666")
+    try:
+        r = TestClient(api.app).request("DELETE", "/api/me/data", json={"confirm": "DELETE"}, headers={"Authorization": f"Bearer {_jwt_with_sign_in_age(1)}"})
+    finally:
+        api.app.dependency_overrides.clear()
+    assert r.status_code == 403   # a fresh token alone is not enough when the account has a password

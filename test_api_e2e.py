@@ -59,7 +59,7 @@ else:
 
 print("\n[+] Testing Clinical PDF Report Generation via API ...")
 pdf_resp = requests.post("http://localhost:8000/api/session/report/pdf", json={
-    "session_id": os.environ["API_TEST_SESSION_ID"],  # a session the test user owns (e.g. from test_supabase_e2e)
+    "session_id": requests.post("http://localhost:8000/api/sessions", headers=HEADERS).json()["session_id"],  # expect 422: no clinician assessment yet
     "inline": True
 }, headers=HEADERS)
 print(f"PDF POST Status Code: {pdf_resp.status_code}")

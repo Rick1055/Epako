@@ -111,12 +111,46 @@ def test_patient_isolation(db):
     assert db.q("authenticated", PA, "update patient_profiles set voice_profile='{}' where id=%s", (db.pid[PB],)) == 0
 
 
-def test_vocabulary_starts_empty_and_only_its_patient_can_change_it(db):
+def test_vocabulary_starts_empty_and_is_never_null(db):
     assert db.q("authenticated", PA, "select vocabulary from patient_profiles") == [({},)]
-    assert db.q("authenticated", PA, """update patient_profiles set vocabulary='{"water": 3}' where id=%s""", (db.pid[PA],)) == 1
-    assert db.q("authenticated", PA, """update patient_profiles set vocabulary='{"x": 1}' where id=%s""", (db.pid[PB],)) == 0
-    assert db.q(None, None, "select vocabulary from patient_profiles where id=%s", (db.pid[PB],)) == [({},)]
-    denied(db, "authenticated", PA, "update patient_profiles set vocabulary = null where id=%s", (db.pid[PA],), "null value")
+    denied(db, "service_role", None, "update patient_profiles set vocabulary = null where id=%s", (db.pid[PA],), "null value")
+
+
+def test_only_the_server_writes_what_the_patient_taught_it(db):
+    # the server loads these on every request; a planted blob would cost CPU on every utterance
+    for column in ("vocabulary", "phonetic_corrections"):
+        denied(db, "authenticated", PA, f"""update patient_profiles set {column} = '{{"w": 1}}' where id = %s""", (db.pid[PA],), "permission denied")
+    denied(db, "authenticated", PA, "delete from patient_profiles where id = %s", (db.pid[PA],), "permission denied")
+    denied(db, "authenticated", PA, """insert into patient_profiles(user_id, vocabulary) values (%s, '{"w": 1}')""", (PA,), "permission denied")
+    assert db.q("service_role", None, """update patient_profiles set vocabulary = '{"water": 2}' where id = %s""", (db.pid[PA],)) == 1
+    # what patients do set themselves still works
+    assert db.q("authenticated", PA, """update patient_profiles set voice_profile = '{"template": "male_gentle"}',
+                consent_audio_storage = true, consent_updated_at = now() where id = %s""", (db.pid[PA],)) == 1
+
+
+@pytest.mark.parametrize("column", ["vocabulary", "phonetic_corrections", "voice_profile"])
+def test_profile_json_is_always_a_bounded_object_even_if_the_server_has_a_bug(db, column):
+    upd = f"update patient_profiles set {column} = %s::jsonb where id = %s"
+    huge = '{' + ",".join(f'"w{i}": 1' for i in range(200_000)) + '}'   # ~2.6 MB of "words"
+    for bad in (huge, '["a", "list"]', '"a string"', '42'):
+        denied(db, "service_role", None, upd, (bad, db.pid[PA]), "violates check constraint")
+    assert db.q("service_role", None, upd, ('{"water": 2}', db.pid[PA])) == 1   # normal data still saves
+
+
+def test_a_patient_cannot_make_a_second_profile_or_take_over_another(db):
+    denied(db, "authenticated", PA, "insert into patient_profiles(user_id) values (%s)", (PA,), "duplicate key")
+    denied(db, "authenticated", PA, "insert into patient_profiles(user_id) values (%s)", (PB,), "row-level security")
+    denied(db, "authenticated", PA, "update patient_profiles set user_id = %s where id = %s", (PB, db.pid[PA]), "permission denied")
+    assert db.q("authenticated", PA, "update patient_profiles set voice_profile = '{}' where id = %s", (db.pid[PB],)) == 0
+
+
+def test_clinicians_never_read_or_change_a_patients_profile_row(db):
+    link(db)   # even the verified clinician this patient linked (every account has its own profile row; never the patient's)
+    for who in (DC, DU, DE):
+        assert db.q("authenticated", who, "select * from patient_profiles where id = %s", (db.pid[PA],)) == []
+        assert db.q("authenticated", who, """update patient_profiles set voice_profile = '{"x": 1}' where id = %s""", (db.pid[PA],)) == 0
+        denied(db, "authenticated", who, """update patient_profiles set vocabulary = '{"x": 1}' where id = %s""", (db.pid[PA],), "permission denied")
+    assert db.q(None, None, "select vocabulary, voice_profile from patient_profiles where id=%s", (db.pid[PA],)) == [({}, {})]
 
 
 def test_biomarkers_are_server_write_only(db):

@@ -95,3 +95,21 @@ def test_a_sentence_counts_as_repeated_only_if_every_word_was_said_before():
     assert v.repeating(["i want water"] * REPEAT_WINDOW) is True
     v.add("i want a giraffe")
     assert v.repeating(["i want a giraffe"] * REPEAT_WINDOW) is False   # "giraffe" was said only once
+
+
+def test_the_vocabulary_keeps_the_most_used_words_and_stays_far_below_the_database_limit():
+    import json
+    from vocabulary import MAX_WORDS
+    v = Vocabulary({f"rare{i}": 1 for i in range(MAX_WORDS)})
+    for _ in range(3):
+        v.add("water please")
+    assert len(v.counts) == MAX_WORDS and v.counts["water"] == 3 and v.counts["please"] == 3
+    long_words = Vocabulary({f"extraordinarily{i:05d}": 99999 for i in range(MAX_WORDS)})
+    assert len(json.dumps(long_words.counts)) < 200_000 / 2   # migration 20261031: vocabulary <= 200,000 bytes
+
+
+def test_snapping_only_considers_the_most_used_words_so_a_planted_vocabulary_cannot_burn_cpu():
+    from vocabulary import MAX_WORDS
+    planted = {f"zz{i}": 2 for i in range(MAX_WORDS)}
+    planted["ship"] = 1   # the only close word, but outside the most-used MAX_WORDS
+    assert Vocabulary(planted).closest("sip") is None

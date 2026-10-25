@@ -494,8 +494,8 @@ def test_session_routes_write_scores_with_the_server_key_only():
     assert tables["patient_profiles"][0]["phonetic_corrections"]["wun"] == {"to": "one", "ok": 2, "bad": 0}
     assert tables["patient_profiles"][0]["vocabulary"] == {"one": 3, "cat": 3}   # every answer adds the words meant
     assert done.json()["utterances_count"] == 3 and done.json()["accuracy_rate"] == pytest.approx(33.33, abs=0.01)
-    assert set(user_db.writes) == {"patient_profiles"}                           # the patient's own client never writes scores
-    assert set(server_db.writes) == {"therapy_sessions", "session_utterances"}   # only the server key does
+    assert set(user_db.writes) == set()   # the patient's own client writes neither scores nor what the server learned
+    assert set(server_db.writes) == {"therapy_sessions", "session_utterances", "patient_profiles"}   # only the server key does
 
 
 def test_analyze_stores_biomarkers_with_the_server_key_for_own_sessions_only():

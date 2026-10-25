@@ -9,6 +9,8 @@ try:
 except ImportError:
     import local_tts
 
+MAX_NOTE_SECONDS = 120   # only this much of each voice note is decoded: a small compressed file can hold hours of audio
+
 
 class VoiceRestorationEngine:
     """
@@ -138,7 +140,7 @@ class VoiceRestorationEngine:
                 print(f"[!] File at: {path} not found, skipping...")
                 continue
 
-            audio, _ = librosa.load(path, sr=self.sample_rate)
+            audio, _ = librosa.load(path, sr=self.sample_rate, duration=MAX_NOTE_SECONDS)
             if len(audio) == 0:
                 continue
 

@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 import threading
 import functools
 import asyncio
+import collections
 from typing import Optional, Dict, Any, List
 from uuid import UUID
 
@@ -50,13 +51,16 @@ app = FastAPI(
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_AUDIO_SECONDS = 60
 _MAX_WS_CHUNK_BYTES = 256 * 1024
+_MAX_VOICE_NOTES = 10
+_MAX_SOCKETS_PER_USER = 2   # each live socket holds a 30 s audio buffer
+_open_sockets = collections.Counter()   # shortcut: per worker process; move to Postgres if you run several workers
 
 # CORS Middleware - origins come from CORS_ALLOWED_ORIGINS (comma-separated); default is none
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -222,11 +226,16 @@ def rate_limit(name: str, limit: int, per: float = 60.0):
 # Helper: Audio Conversions & Signal Processing
 # ---------------------------------------------------------------------------
 def decode_audio_bytes(audio_bytes: bytes, target_sr: int = 16000) -> np.ndarray:
-    """Reads raw audio bytes (WAV, MP3, OGG, WebM) into a 16kHz float32 numpy array."""
+    """Reads raw audio bytes (WAV, MP3, OGG, WebM) into a 16kHz float32 numpy array.
+    Anything that is not decodable audio at a real sample rate is refused with 400, never a crash."""
     try:
         with sf.SoundFile(io.BytesIO(audio_bytes)) as f:
             sr = f.samplerate
+            if not 8000 <= sr <= 192000:   # a forged header (1 Hz, 2 GHz) would otherwise reach the engines
+                raise HTTPException(status_code=400, detail="Unsupported sample rate.")
             data = f.read(frames=(MAX_AUDIO_SECONDS + 1) * sr, dtype="float32")  # bounded: never decode more than needed to see it is too long
+    except HTTPException:
+        raise
     except Exception:
         import tempfile
         with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
@@ -234,6 +243,8 @@ def decode_audio_bytes(audio_bytes: bytes, target_sr: int = 16000) -> np.ndarray
             tmp_path = tmp.name
         try:
             data, sr = librosa.load(tmp_path, sr=target_sr, mono=True, duration=MAX_AUDIO_SECONDS + 1)
+        except Exception as e:
+            raise fail(400, "Unsupported or corrupt audio.", e)
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
@@ -466,7 +477,7 @@ def get_voice(token, user_id) -> Dict[str, Any]:
         raise fail(503, "Voice profile unavailable.", e)
     try:
         return voice_settings(VoiceProfile(**((rows[0].get("voice_profile") if rows else None) or {})))
-    except ValidationError as e:
+    except (ValidationError, TypeError) as e:   # TypeError: not even an object (written around the API)
         raise fail(422, "The saved voice profile is invalid; please save it again.", e)
 
 
@@ -509,6 +520,8 @@ async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
     """
     if len(files) < 2:
         raise HTTPException(status_code=400, detail="Please upload at least 2 clean voice notes.")
+    if len(files) > _MAX_VOICE_NOTES:   # each is written to disk and analysed: an unbounded list fills the disk
+        raise HTTPException(status_code=400, detail=f"Please upload at most {_MAX_VOICE_NOTES} voice notes.")
 
     restoration_eng = await asyncio.to_thread(get_restoration_engine)
     temp_paths = []
@@ -602,7 +615,7 @@ def own_session(client, user_id, session_id: str) -> str:
 
 
 @app.post("/api/sessions")
-def start_session(authorization: str = Header(...), user=Depends(require_user)):
+def start_session(authorization: str = Header(...), user=Depends(rate_limit("sessions", 30))):
     client = user_client(authorization.partition(" ")[2])
     prof = client.table("patient_profiles").select("id").eq("user_id", user.id).execute().data
     if not prof:
@@ -629,12 +642,13 @@ def save_utterance(session_id: UUID, req: UtteranceIn, authorization: str = Head
         "confirmed": confirmed, "latency_ms": req.latency_ms,
     }).execute()
     # shortcut: read-modify-write, so two simultaneous saves can lose one lesson; use an RPC if that matters
-    client.table("patient_profiles").update({"phonetic_corrections": engine.table, "vocabulary": vocab.counts}).eq("id", patient_id).execute()
+    # server key: patients cannot write what the server learns (migration 20261031); patient_id was checked by own_session
+    service_client().table("patient_profiles").update({"phonetic_corrections": engine.table, "vocabulary": vocab.counts}).eq("id", patient_id).execute()
     return {"confirmed": confirmed, "reward": round(reward, 3)}
 
 
 @app.post("/api/sessions/{session_id}/finish")
-def finish_session(session_id: UUID, authorization: str = Header(...), user=Depends(require_user)):
+def finish_session(session_id: UUID, authorization: str = Header(...), user=Depends(rate_limit("finish", 30))):
     """Accuracy, count and duration are computed here from stored rows, not taken from the client."""
     client = user_client(authorization.partition(" ")[2])
     sid = str(session_id)
@@ -795,6 +809,10 @@ async def websocket_speech_rectifier(websocket: WebSocket):
         except Exception:
             pass
         return
+    if _open_sockets[user.id] >= _MAX_SOCKETS_PER_USER:
+        await websocket.close(code=1008)
+        return
+    _open_sockets[user.id] += 1
     print("[+] WebSocket client connected to /ws/rectify")
 
     max_buffer = 30 * 16000
@@ -872,6 +890,12 @@ async def websocket_speech_rectifier(websocket: WebSocket):
 
                 start_rectify = time.time()
 
+                try:   # every utterance costs recogniser time: same budget as POST /api/rectify
+                    await asyncio.to_thread(hit, "rectify", user.id, 30)
+                except HTTPException as e:
+                    await websocket.send_json({"type": "error", "detail": e.detail})
+                    continue
+
                 if not await asyncio.to_thread(contains_speech, utterance_audio):
                     await websocket.send_json({"type": "no_speech"})
                     continue
@@ -912,6 +936,10 @@ async def websocket_speech_rectifier(websocket: WebSocket):
             await websocket.close()
         except Exception:
             pass
+    finally:
+        _open_sockets[user.id] -= 1
+        if _open_sockets[user.id] <= 0:
+            del _open_sockets[user.id]
 
 
 # ---------------------------------------------------------------------------

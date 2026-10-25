@@ -101,11 +101,7 @@ class SupabaseManager:
         if res.data and len(res.data) > 0:
             return res.data[0]
 
-        insert_data = {
-            "user_id": user_id,
-            "voice_profile": {},
-            "phonetic_corrections": {},
-        }
+        insert_data = {"user_id": user_id}   # the only column patients may insert; the rest default to {}
         fallback_res = self.client.table("patient_profiles").insert(insert_data).execute()
         return fallback_res.data[0] if fallback_res.data else insert_data
 

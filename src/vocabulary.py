@@ -4,6 +4,7 @@ Words compared by how they sound, so a misheard word can be matched to one the p
 Sounds come from espeak-ng, bundled with Piper (already installed for the voices), so nothing leaves the machine.
 """
 import functools
+import heapq
 import re
 
 try:
@@ -20,6 +21,7 @@ SNAP_DISTANCE = 0.67  # snap only to a known word at most this far apart in soun
 UNSURE_BELOW = 0.9    # only words the recogniser was less sure of than this are snapped
 REPEAT_WINDOW = 10    # how many of the patient's last confirmed texts decide whether to snap at all
 REPEAT_SHARE = 0.7    # snapping is on when at least this share of them reused known words; on new words it does harm
+MAX_WORDS = 3000      # most-used words kept and searched: bounds CPU per word and keeps the row far below its 200 kB limit
 
 _SOUND = re.compile(r"eɪ|aɪ|oʊ|aʊ|ɔɪ|tʃ|dʒ|.")   # diphthongs and affricates are one sound each
 
@@ -70,7 +72,16 @@ class Vocabulary:
 
     def add(self, text):
         for w in words(text):
-            self.counts[w] = self.counts.get(w, 0) + 1
+            self.counts[w] = self.counts.pop(w, 0) + 1   # re-inserted: the newest word wins a tie when pruning
+        if len(self.counts) > MAX_WORDS:
+            self.counts = dict(self._most_used())
+
+    def _most_used(self):
+        """The MAX_WORDS most-used (word, count) pairs; on equal counts the more recently added word wins."""
+        if len(self.counts) <= MAX_WORDS:
+            return list(self.counts.items())
+        ranked = heapq.nlargest(MAX_WORDS, enumerate(self.counts.items()), key=lambda e: (e[1][1], e[0]))
+        return [kv for _, kv in ranked]
 
     def repeating(self, recent):
         """True when the patient is mostly reusing words: snapping only helps then (on new words it does harm).
@@ -86,8 +97,7 @@ class Vocabulary:
         word = word.lower()
         if not self.counts or word in self.counts:
             return None
-        # shortcut: compares against every known word (fine for a few thousand); index by sound if vocabularies grow far larger
-        ranked = sorted((distance(word, known), -n, known) for known, n in self.counts.items())
+        ranked = sorted((distance(word, known), -n, known) for known, n in self._most_used())
         best = ranked[0]
         if best[0] > SNAP_DISTANCE:
             return None

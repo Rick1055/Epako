@@ -99,7 +99,7 @@ class VoiceRestorationEngine:
         volume_str = f"{volume_pct:+d}%"
 
         warmth = int(np.clip(warmth_pct, -20, 20))
-        roughness = int(np.clip(roughness_pct, -20, 20))
+        roughness = int(np.clip(roughness_pct, 0, 20))   # a stock voice is already clean: there is no "smoother than it"
 
         return {
             "mode": "sculpted",
@@ -168,7 +168,7 @@ class VoiceRestorationEngine:
         overall_f0 = float(np.median(pitches))
         overall_syl_rate = float(np.median(rates)) if len(rates) > 0 else 3.5
         overall_warmth = int(np.clip(np.median(warmths), -20, 20))
-        overall_roughness = int(np.clip(np.median(roughnesses), -20, 20))
+        overall_roughness = int(np.clip(np.median(roughnesses), 0, 20))
 
         # Speaking rate percentage relative to standard 3.5 syl/s
         rate_pct = int(((overall_syl_rate - 3.5) / 3.5) * 40)
@@ -195,7 +195,7 @@ class VoiceRestorationEngine:
 
         voice_id = self.voice_palette[template]
         baseline_f0 = 200.0 if gender == "female" else 125.0
-        pitch_delta = int(overall_f0 - baseline_f0)
+        pitch_delta = int(np.clip(overall_f0 - baseline_f0, -100, 100))
         pitch_str = f"{pitch_delta:+d}Hz"
 
         return {
@@ -209,6 +209,9 @@ class VoiceRestorationEngine:
             "pitch": pitch_str,
             "rate": rate_str,
             "volume": "+0%",
+            "pitch_hz": pitch_delta,   # the numeric fields are what PUT /api/voice/profile saves
+            "rate_pct": rate_pct,
+            "volume_pct": 0,
             "warmth_pct": overall_warmth,
             "roughness_pct": overall_roughness,
         }
@@ -270,48 +273,3 @@ if __name__ == "__main__":
     print("\n" + "=" * 65)
     print("ALL VOICE RESTORATION MODES VERIFIED AND READY!")
     print("=" * 65)
-
-if __name__ == "__main__":
-    print("=" * 65)
-    print("TESTING DYSARTHRIC VOICE RESTORATION & PROFILING ENGINE")
-    print("=" * 65)
-
-    engine = VoiceRestorationEngine()
-    test_text = "He really crucified him; he nailed it for a yard loss."
-
-    # Test Choice 1: Family-Sculpted Voice Profile (5 controls)
-    print("\n[>] Testing Choice 1: Family Voice Sculptor (5 Controls)")
-    sculpted = engine.create_sculpted_profile(
-        template="female_warm_gentle",
-        pitch_hz=10,
-        rate_pct=-5,
-        volume_pct=0,
-        warmth_pct=10,
-        roughness_pct=-5
-    )
-    print(f"    Selected Template: {sculpted['template']} ({sculpted['voice_id']})")
-    print(f"    5-Control Config : Pitch={sculpted['pitch']}, Rate={sculpted['rate']}, Warmth={sculpted['warmth_pct']}, Roughness={sculpted['roughness_pct']}")
-
-    res1 = engine.restore_voice_from_profile(test_text, sculpted, output_path="sculpted_voice.wav")
-    print(f"    [+] Synthesized  : {res1['output_path']} ({res1['duration_ms']}s in {res1['latency_ms']:.1f}ms)")
-
-    # Test Choice 2: Voice Banking from 3 TORGO Control Recordings
-    print("\n[>] Testing Choice 2: Pre-Morbid Voice Notes Reconstruction")
-    import glob
-    torgo_notes = glob.glob("data/TORGO/FC02/**/*.wav", recursive=True)[:3]
-
-    if len(torgo_notes) >= 3:
-        vn_profile = engine.create_profile_from_voice_notes(torgo_notes, min_notes=3)
-        print(f"    Analyzed Notes   : {vn_profile['voice_notes_count']} notes ({vn_profile['total_duration_s']}s audio)")
-        print(f"    Acoustic Profile : F0={vn_profile['reconstructed_f0']}Hz, Warmth={vn_profile['warmth_pct']}, Roughness={vn_profile['roughness_pct']}")
-        print(f"    Matched Template : {vn_profile['template']} (Pitch offset: {vn_profile['pitch']}, Rate: {vn_profile['rate']})")
-
-        res2 = engine.restore_voice_from_profile(test_text, vn_profile, output_path="reconstructed_voice.wav")
-        print(f"    [+] Synthesized  : {res2['output_path']} ({res2['duration_ms']}s in {res2['latency_ms']:.1f}ms)")
-    else:
-        print(f"[!] Need at least 3 audio files to test Choice 2 (found {len(torgo_notes)}).")
-
-    print("\n" + "=" * 65)
-    print("ALL VOICE RESTORATION MODES VERIFIED AND READY!")
-    print("=" * 65)
-

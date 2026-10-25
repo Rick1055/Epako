@@ -33,7 +33,7 @@ from speech_gate import contains_speech
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Request, Response, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -263,10 +263,13 @@ async def synthesize_neural_async(
     voice: str = local_tts.DEFAULT_VOICE,
     pitch: str = "+0Hz",
     rate: str = "+0%",
+    volume: str = "+0%",
+    warmth: int = 0,
+    roughness: int = 0,
 ) -> Dict[str, Any]:
     """On-device neural voice synthesis (Piper); the text never leaves this machine."""
     try:
-        return await asyncio.to_thread(local_tts.synthesize, text, voice, pitch, rate)
+        return await asyncio.to_thread(local_tts.synthesize, text, voice, pitch, rate, volume, 16000, warmth, roughness)
     except FileNotFoundError as e:
         print(f"[!] {e}")
         raise HTTPException(status_code=503, detail="Voice model not installed.")
@@ -275,13 +278,28 @@ async def synthesize_neural_async(
 # ---------------------------------------------------------------------------
 # Pydantic Request Models
 # ---------------------------------------------------------------------------
-class VoiceSculptRequest(BaseModel):
-    sample_phrase: Optional[str] = "The morning sun gently illuminates the quiet cedar grove."
-    template: Optional[str] = "male_smooth_warm"
-    pitch_hz: Optional[int] = 0
-    rate_pct: Optional[int] = 0
-    warmth_pct: Optional[int] = 68
-    roughness_pct: Optional[int] = 0
+class VoiceProfile(BaseModel):
+    """The saved voice (patient_profiles.voice_profile); the ranges are what synthesis can honour."""
+    template: str = "male_smooth_warm"
+    pitch_hz: int = Field(default=0, ge=-100, le=100)
+    rate_pct: int = Field(default=0, ge=-50, le=100)
+    volume_pct: int = Field(default=0, ge=-50, le=50)
+    warmth_pct: int = Field(default=0, ge=-20, le=20)
+    roughness_pct: int = Field(default=0, ge=0, le=20)
+
+    @field_validator("template")
+    @classmethod
+    def known_template(cls, v):
+        engine = get_restoration_engine()
+        if engine is None:
+            raise RuntimeError("Voice restoration engine unavailable.")   # a server fault, not a bad profile: not a ValueError
+        if v not in engine.voice_palette:
+            raise ValueError("unknown voice template")
+        return v
+
+
+class VoiceSculptRequest(VoiceProfile):
+    sample_phrase: str = Field(default="The morning sun gently illuminates the quiet cedar grove.", max_length=300)
 
 
 class ClinicalPdfReportRequest(BaseModel):
@@ -311,10 +329,6 @@ async def rectify_speech(
     """
     start_total = time.time()
     raw_bytes = None
-    voice_template = "male_smooth_warm"
-    pitch_hz = 0
-    rate_pct = 0
-    warmth_pct = 68
 
     if int(request.headers.get("content-length") or 0) > 2 * _MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Upload too large.")
@@ -326,10 +340,6 @@ async def rectify_speech(
             b64_str = body.get("audio_base64", "").split(",")[-1]
             if b64_str:
                 raw_bytes = base64.b64decode(b64_str)
-            voice_template = body.get("voice_template", "male_smooth_warm")
-            pitch_hz = body.get("pitch_hz", 0)
-            rate_pct = body.get("rate_pct", 0)
-            warmth_pct = body.get("warmth_pct", 68)
         except Exception as e:
             raise fail(400, "Invalid JSON payload.", e)
     elif file is not None:
@@ -383,19 +393,8 @@ async def rectify_speech(
     audio_output_b64 = None
 
     if repaired_text:
-        template = voice_template
-        pitch = f"{pitch_hz:+d}Hz"
-        rate = f"{rate_pct:+d}%"
-        
-        restoration_eng = await asyncio.to_thread(get_restoration_engine)
-        voice_id = restoration_eng.voice_palette.get(template, local_tts.DEFAULT_VOICE) if restoration_eng else local_tts.DEFAULT_VOICE
-
-        synth_res = await synthesize_neural_async(
-            text=repaired_text,
-            voice=voice_id,
-            pitch=pitch,
-            rate=rate,
-        )
+        voice = await asyncio.to_thread(get_voice, authorization.partition(' ')[2], user.id)
+        synth_res = await synthesize_neural_async(text=repaired_text, **voice)
         synth_latency = synth_res.get("latency_ms", 0.0)
         audio_output_b64 = audio_to_base64_wav(synth_res["audio"], 16000)
     # nothing understood: say so (no audio), never hand the patient's own recording back as "rectified"
@@ -452,6 +451,35 @@ async def extract_clinical_biomarkers(file: UploadFile = File(...)):
     return {"success": True, "biomarkers": results}
 
 
+def voice_settings(profile: VoiceProfile) -> Dict[str, Any]:
+    """synthesize_neural_async arguments for a validated profile."""
+    p = get_restoration_engine().create_sculpted_profile(**profile.model_dump(include=set(VoiceProfile.model_fields)))
+    return {"voice": p["voice_id"], "pitch": p["pitch"], "rate": p["rate"], "volume": p["volume"],
+            "warmth": p["warmth_pct"], "roughness": p["roughness_pct"]}
+
+
+def get_voice(token, user_id) -> Dict[str, Any]:
+    """The patient's saved voice ({} until they save one: the default voice). Never taken from the request."""
+    try:
+        rows = user_client(token).table("patient_profiles").select("voice_profile").eq("user_id", user_id).execute().data
+    except Exception as e:
+        raise fail(503, "Voice profile unavailable.", e)
+    try:
+        return voice_settings(VoiceProfile(**((rows[0].get("voice_profile") if rows else None) or {})))
+    except ValidationError as e:
+        raise fail(422, "The saved voice profile is invalid; please save it again.", e)
+
+
+@app.put("/api/voice/profile")
+def save_voice_profile(profile: VoiceProfile, authorization: str = Header(...), user=Depends(rate_limit("voice_profile", 20))):
+    """Saves the voice /api/rectify and /ws/rectify speak with (from /api/voice/sculpt or /api/voice/bank)."""
+    saved = user_client(authorization.partition(" ")[2]).table("patient_profiles") \
+        .update({"voice_profile": profile.model_dump()}).eq("user_id", user.id).execute().data
+    if not saved:
+        raise HTTPException(status_code=404, detail="No patient profile.")
+    return {"success": True, "profile": profile.model_dump()}
+
+
 @app.post("/api/voice/sculpt", dependencies=[Depends(rate_limit("sculpt", 20))])
 async def sculpt_voice_timbre(request: VoiceSculptRequest):
     """
@@ -461,20 +489,8 @@ async def sculpt_voice_timbre(request: VoiceSculptRequest):
     if not restoration_eng:
         raise HTTPException(status_code=500, detail="Voice restoration engine unavailable.")
 
-    profile = restoration_eng.create_sculpted_profile(
-        template=request.template,
-        pitch_hz=request.pitch_hz,
-        rate_pct=request.rate_pct,
-        warmth_pct=request.warmth_pct,
-        roughness_pct=request.roughness_pct,
-    )
-
-    synth_res = await synthesize_neural_async(
-        text=request.sample_phrase,
-        voice=profile["voice_id"],
-        pitch=profile["pitch"],
-        rate=profile["rate"],
-    )
+    profile = restoration_eng.create_sculpted_profile(**request.model_dump(include=set(VoiceProfile.model_fields)))
+    synth_res = await synthesize_neural_async(text=request.sample_phrase, **voice_settings(request))
 
     audio_b64 = audio_to_base64_wav(synth_res["audio"], 16000)
 
@@ -868,7 +884,12 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                 repaired = repair.repair(raw_text, asr_res.get("words")).get("repaired_text", raw_text)
 
                 if repaired:
-                    synth = await synthesize_neural_async(repaired)
+                    try:
+                        voice = await asyncio.to_thread(get_voice, auth_msg['token'], user.id)
+                    except HTTPException as e:
+                        await websocket.send_json({"type": "error", "detail": e.detail})
+                        continue
+                    synth = await synthesize_neural_async(repaired, **voice)
                     audio_b64 = audio_to_base64_wav(synth["audio"], 16000)
                 else:
                     audio_b64 = None  # nothing understood: no audio, never the patient's own recording as "rectified"

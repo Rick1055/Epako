@@ -54,13 +54,13 @@ def run_e2e_test():
 
     # 3. Voice Profile & Personalization
     print("\n[Step 3] Updating Voice Palette & Phonetic Memory...")
-    mock_voice_palette = {
-        "engine": "choice_1_sculptor",
-        "base_voice": "en-US-ChristopherNeural",
-        "pitch_hz": 115.0,
-        "rate_pct": -5.0,
-        "warmth_pct": 20.0,
-        "roughness_pct": 5.0,
+    mock_voice_palette = {   # the format api.VoiceProfile accepts; anything else makes /api/rectify answer 422
+        "template": "male_smooth_warm",
+        "pitch_hz": 15,
+        "rate_pct": -5,
+        "volume_pct": 0,
+        "warmth_pct": 20,
+        "roughness_pct": 5,
     }
     mgr.update_voice_profile(mock_voice_palette)
     print(f" [+] Voice profile successfully saved in Supabase.")

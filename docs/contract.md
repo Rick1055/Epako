@@ -36,6 +36,14 @@ RPCs: `create_link_code() -> text` (patient, 10 chars, valid 15 min, one live co
 `{ "<heard word>": { "to": "<intended word>", "ok": int, "bad": int } }` — applied only when `ok >= 2` and `ok/(ok+bad) >= 0.6`.
 Owner of the logic: `src/feedback_engine.py` (`FeedbackEngine.apply` / `.learn`). Nothing else writes this field.
 
+## Voice profile (`patient_profiles.voice_profile`)
+
+`{ "template": <key of VoiceRestorationEngine.voice_palette>, "pitch_hz": -100..100, "rate_pct": -50..100,
+"volume_pct": -50..50, "warmth_pct": -20..20, "roughness_pct": 0..20 }` (`api.VoiceProfile`); `{}` means the default
+voice. Saved through `PUT /api/voice/profile`; `/api/rectify` and `/ws/rectify` always speak with it and ignore any
+voice settings in the request. A stored profile outside these ranges (written around the API) is refused with 422,
+never replaced silently. Warmth tilts the tone (darker +), roughness adds breath-like texture (`local_tts.shape_voice`).
+
 ## Vocabulary (`patient_profiles.vocabulary`)
 
 `{ "<word>": count }` — every word of every `final_text` the patient sends (what they meant). In repair, a word the
@@ -56,7 +64,8 @@ Owner of the logic: `src/vocabulary.py`; written only by `POST /api/sessions/{id
 | `POST /api/session/analyze` | form: `session_id`, `file` (audio) | `{success, biomarkers}`; needs `SUPABASE_SERVICE_ROLE_KEY` |
 | `POST /api/session/report/pdf` | `{session_id, inline?}` | PDF; 422 if no assessment or unmeasured values |
 | `DELETE /api/me/data` | `{confirm: "DELETE", password?}` (email accounts must send the password; passwordless accounts need a sign-in within 5 minutes) | `{success}`; audio first, then account; 3 per hour |
-| `POST /api/rectify` | audio (multipart or base64 JSON) | `{speech_detected, raw_transcript, repaired_text, rectified_audio, latency, telemetry}`. If no speech is detected (silence, noise) or nothing was understood, the text is `""` and `rectified_audio` is `null`: the patient's own recording is never returned as "rectified". `WS /ws/rectify` sends `{"type": "no_speech"}` instead of `rectified_output` |
+| `POST /api/rectify` | audio (multipart or base64 JSON) | `{speech_detected, raw_transcript, repaired_text, rectified_audio, latency, telemetry}`. If no speech is detected (silence, noise) or nothing was understood, the text is `""` and `rectified_audio` is `null`: the patient's own recording is never returned as "rectified". `WS /ws/rectify` sends `{"type": "no_speech"}` instead of `rectified_output`, and `{"type": "error", "detail"}` if the saved voice profile is invalid. Both speak with the saved voice profile |
+| `PUT /api/voice/profile` | a voice profile (see above) | `{success, profile}`; 422 if out of range |
 | `POST /api/biomarkers`, `/api/voice/sculpt`, `/api/voice/bank`, `GET /health`, `WS /ws/rectify` | see `src/api.py` | |
 
 ## Rules that tests must keep true

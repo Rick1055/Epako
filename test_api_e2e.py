@@ -35,13 +35,7 @@ audio_b64 = "data:audio/wav;base64," + base64.b64encode(buf.getvalue()).decode("
 
 print("[+] Sending test audio to http://localhost:8000/api/rectify ...")
 t0 = time.time()
-resp = requests.post("http://localhost:8000/api/rectify", json={
-    "audio_base64": audio_b64,
-    "voice_template": "male_smooth_warm",
-    "warmth_pct": 70,
-    "pitch_hz": 0,
-    "rate_pct": 0
-}, headers=HEADERS)
+resp = requests.post("http://localhost:8000/api/rectify", json={"audio_base64": audio_b64}, headers=HEADERS)  # voice: the saved profile
 dur = (time.time() - t0) * 1000
 
 print(f"Status Code: {resp.status_code} (took {dur:.1f}ms)")

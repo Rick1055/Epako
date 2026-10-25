@@ -211,6 +211,36 @@ def test_local_tts_applies_rate_volume_and_resamples():
     assert out["audio"].shape[0] == pytest.approx(1600, abs=2)
 
 
+def _voice_like(sr=16000, seconds=1.0):
+    t = np.arange(int(sr * seconds)) / sr
+    harmonics = sum(np.sin(2 * np.pi * 150 * k * t) / k for k in range(1, 30))
+    return (0.3 * harmonics * (0.5 + 0.5 * np.sin(2 * np.pi * 4 * t) ** 2)).astype("float32")   # 150 Hz voice, 4 syllables/s
+
+
+def test_warmth_darkens_or_brightens_and_roughness_adds_texture_measured_as_voice_banking_measures_them():
+    import librosa
+    from local_tts import shape_voice
+    x = _voice_like()
+    centroid = lambda a: librosa.feature.spectral_centroid(y=a, sr=16000).mean()
+    flatness = lambda a: librosa.feature.spectral_flatness(y=a).mean()
+    assert centroid(shape_voice(x, 16000, 20, 0)) < centroid(x) < centroid(shape_voice(x, 16000, -20, 0))
+    assert flatness(shape_voice(x, 16000, 0, 20)) > 2 * flatness(x)
+    assert np.array_equal(shape_voice(x, 16000, 0, 0), x)                                       # neutral is untouched
+    assert np.array_equal(shape_voice(x, 16000, 10, 10), shape_voice(x, 16000, 10, 10))           # same voice every time
+    for w, r in ((20, 0), (-20, 0), (0, 20), (20, 20)):
+        assert np.abs(shape_voice(x, 16000, w, r)).max() <= np.abs(x).max() + 1e-6               # never louder than the voice
+
+
+def test_local_tts_passes_warmth_and_roughness_to_the_audio():
+    import local_tts
+    fake = _FakeVoice()
+    fake.synthesize = lambda text, syn_config: [mock.Mock(audio_float_array=_voice_like(22050))]
+    with mock.patch.object(local_tts, "_load", return_value=fake):
+        neutral = local_tts.synthesize("hi")["audio"]
+        shaped = local_tts.synthesize("hi", warmth=15, roughness=10)["audio"]
+    assert neutral.shape == shaped.shape and not np.allclose(neutral, shaped)
+
+
 def test_local_tts_rejects_path_tricks_and_missing_models():
     import local_tts
     with pytest.raises(ValueError):
@@ -610,7 +640,8 @@ def test_websocket_snaps_unsure_words_too():
     voice = mock.AsyncMock(return_value={"audio": np.zeros(1600, dtype="float32"), "latency_ms": 1.0})
     loud = (rng.standard_normal(1600) * 0.3 * 32767).astype("int16").tobytes()
     quiet = np.zeros(1600, dtype="int16").tobytes()
-    with mock.patch.object(api, "verify_token", return_value=mock.Mock(id="ws-user-4")), mock.patch.object(api, "contains_speech", return_value=True),             mock.patch.object(api, "get_asr_engine", return_value=asr), mock.patch.object(api, "synthesize_neural_async", voice),             mock.patch.object(api, "get_repair_engine", return_value=IntentRepair(vocabulary=Vocabulary({"ship": 3}))):
+    with mock.patch.object(api, "verify_token", return_value=mock.Mock(id="ws-user-4")), mock.patch.object(api, "contains_speech", return_value=True),             mock.patch.object(api, "get_asr_engine", return_value=asr), mock.patch.object(api, "synthesize_neural_async", voice),             mock.patch.object(api, "get_repair_engine", return_value=IntentRepair(vocabulary=Vocabulary({"ship": 3}))), \
+            mock.patch.object(api, "get_voice", return_value={}):
         with TestClient(api.app).websocket_connect("/ws/rectify") as ws:
             ws.send_text(json.dumps({"type": "auth", "token": "t", "sample_rate": 16000, "encoding": "pcm_s16le"}))
             for chunk in [loud] * 6 + [quiet] * 8:
@@ -619,3 +650,116 @@ def test_websocket_snaps_unsure_words_too():
             while not seen or seen[-1]["type"] == "telemetry":
                 seen.append(ws.receive_json())
     assert seen[-1]["type"] == "rectified_output" and seen[-1]["repaired_text"] == "Ship."
+
+
+SAVED_VOICE = {"template": "female_warm_gentle", "pitch_hz": 10, "rate_pct": -5, "volume_pct": 0, "warmth_pct": 12, "roughness_pct": 4}
+
+
+def _voice_world(voice_profile):
+    tables, user_db, _ = _session_world()
+    tables["patient_profiles"][0]["voice_profile"] = voice_profile
+    return tables, user_db
+
+
+def test_a_voice_profile_is_saved_only_within_the_ranges_synthesis_can_honour():
+    from fastapi.testclient import TestClient
+    import api
+    tables, user_db = _voice_world({})
+    _as(USER)
+    try:
+        with mock.patch.object(api, "user_client", return_value=user_db):
+            c = TestClient(api.app)
+            bad = [c.put("/api/voice/profile", headers=AUTH, json={**SAVED_VOICE, **change}).status_code
+                   for change in ({"warmth_pct": 68}, {"roughness_pct": -5}, {"template": "darth_vader"}, {"pitch_hz": 500})]
+            assert tables["patient_profiles"][0]["voice_profile"] == {}
+            ok = c.put("/api/voice/profile", headers=AUTH, json=SAVED_VOICE)
+    finally:
+        api.app.dependency_overrides.clear()
+    assert bad == [422, 422, 422, 422]
+    assert ok.status_code == 200 and tables["patient_profiles"][0]["voice_profile"] == SAVED_VOICE
+
+
+def _rectify_voice(voice_profile, body_extra=None):
+    from fastapi.testclient import TestClient
+    import api
+    from intent_repair import IntentRepair
+    _, user_db = _voice_world(voice_profile)
+    asr = mock.Mock()
+    asr.transcribe.return_value = {"text": "hello", "words": None, "latency_ms": 1.0}
+    voice = mock.AsyncMock(return_value={"audio": np.zeros(1600, dtype="float32"), "latency_ms": 1.0})
+    _as(USER)
+    try:
+        with mock.patch.object(api, "contains_speech", return_value=True), mock.patch.object(api, "get_asr_engine", return_value=asr), \
+                mock.patch.object(api, "get_repair_engine", return_value=IntentRepair()), mock.patch.object(api, "user_client", return_value=user_db), \
+                mock.patch.object(api, "synthesize_neural_async", voice):
+            r = TestClient(api.app).post("/api/rectify", json={"audio_base64": _wav_b64(), **(body_extra or {})}, headers=AUTH)
+    finally:
+        api.app.dependency_overrides.clear()
+    return r, voice
+
+
+def test_rectify_speaks_with_the_saved_voice_not_settings_sent_in_the_request():
+    r, voice = _rectify_voice(SAVED_VOICE, {"voice_template": "male_deep_gruff", "pitch_hz": -90, "warmth_pct": 68})
+    assert r.status_code == 200
+    assert voice.await_args.kwargs == {"text": "Hello.", "voice": "en_US-lessac-medium", "pitch": "+10Hz", "rate": "-5%",
+                                       "volume": "+0%", "warmth": 12, "roughness": 4}
+
+
+def test_rectify_uses_the_default_voice_until_one_is_saved_and_refuses_a_corrupted_one():
+    r, voice = _rectify_voice({})
+    assert r.status_code == 200 and voice.await_args.kwargs["voice"] == "en_US-ryan-medium" and voice.await_args.kwargs["warmth"] == 0
+    bad, voice = _rectify_voice({**SAVED_VOICE, "warmth_pct": 68})   # written straight to the database, around the API
+    assert bad.status_code == 422 and "voice profile" in bad.json()["detail"] and not voice.await_args_list
+
+
+def test_websocket_speaks_with_the_saved_voice():
+    import json
+    from fastapi.testclient import TestClient
+    import api
+    from intent_repair import IntentRepair
+    _, user_db = _voice_world(SAVED_VOICE)
+    asr = mock.Mock()
+    asr.transcribe.return_value = {"text": "hello", "words": None, "latency_ms": 1.0}
+    voice = mock.AsyncMock(return_value={"audio": np.zeros(1600, dtype="float32"), "latency_ms": 1.0})
+    loud = (rng.standard_normal(1600) * 0.3 * 32767).astype("int16").tobytes()
+    quiet = np.zeros(1600, dtype="int16").tobytes()
+    with mock.patch.object(api, "verify_token", return_value=mock.Mock(id=USER)), mock.patch.object(api, "contains_speech", return_value=True), \
+            mock.patch.object(api, "get_asr_engine", return_value=asr), mock.patch.object(api, "synthesize_neural_async", voice), \
+            mock.patch.object(api, "get_repair_engine", return_value=IntentRepair()), mock.patch.object(api, "user_client", return_value=user_db):
+        with TestClient(api.app).websocket_connect("/ws/rectify") as ws:
+            ws.send_text(json.dumps({"type": "auth", "token": "t", "sample_rate": 16000, "encoding": "pcm_s16le"}))
+            for chunk in [loud] * 6 + [quiet] * 8:
+                ws.send_bytes(chunk)
+            seen = []
+            while not seen or seen[-1]["type"] == "telemetry":
+                seen.append(ws.receive_json())
+    assert seen[-1]["type"] == "rectified_output"
+    assert voice.await_args.kwargs["voice"] == "en_US-lessac-medium" and voice.await_args.kwargs["warmth"] == 12
+
+
+def test_sculpt_preview_rejects_out_of_range_values_and_applies_warmth_and_roughness():
+    from fastapi.testclient import TestClient
+    import api
+    voice = mock.AsyncMock(return_value={"audio": np.zeros(1600, dtype="float32"), "latency_ms": 1.0})
+    _as(USER)
+    try:
+        with mock.patch.object(api, "synthesize_neural_async", voice):
+            c = TestClient(api.app)
+            too_warm = c.post("/api/voice/sculpt", headers=AUTH, json={"warmth_pct": 68})
+            ok = c.post("/api/voice/sculpt", headers=AUTH, json=SAVED_VOICE)
+    finally:
+        api.app.dependency_overrides.clear()
+    assert too_warm.status_code == 422 and ok.status_code == 200
+    assert voice.await_args.kwargs["warmth"] == 12 and voice.await_args.kwargs["roughness"] == 4
+
+
+def test_voice_banking_returns_a_profile_that_can_be_saved_as_is(tmp_path):
+    import soundfile as sf
+    import api
+    from voice_restoration import VoiceRestorationEngine
+    notes = []
+    for i in range(3):
+        sf.write(tmp_path / f"n{i}.wav", _voice_like(seconds=2.0), 16000)
+        notes.append(str(tmp_path / f"n{i}.wav"))
+    banked = VoiceRestorationEngine().create_profile_from_voice_notes(notes)
+    api.VoiceProfile(**{k: banked[k] for k in api.VoiceProfile.model_fields})   # raises if out of range

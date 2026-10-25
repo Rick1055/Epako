@@ -150,12 +150,24 @@ def verify_token(token: str):
     return res.user
 
 
+@functools.lru_cache(maxsize=1)
+def _query_connections():
+    """One pool of open connections for every patient query: a new Supabase client per query cost ~0.7 s (measured 2026-10-25)."""
+    import httpx
+    from postgrest.constants import DEFAULT_POSTGREST_CLIENT_TIMEOUT
+    return httpx.Client(http2=True, follow_redirects=True, timeout=DEFAULT_POSTGREST_CLIENT_TIMEOUT)
+
+
 def user_client(token: str):
-    """Supabase client acting as the caller, so RLS applies to every query."""
-    from supabase_manager import SupabaseManager
-    client = SupabaseManager().client
-    client.postgrest.auth(token)
-    return client
+    """Database client acting as the caller, so RLS applies to every query. The token travels in this client's own
+    headers with each request; the shared connections carry no one's token."""
+    from postgrest import SyncPostgrestClient
+    from postgrest.constants import DEFAULT_POSTGREST_CLIENT_HEADERS
+    url, key = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/"), (os.getenv("SUPABASE_KEY") or "").strip()
+    if not url or not key:
+        raise HTTPException(status_code=503, detail="Database access is not configured.")
+    return SyncPostgrestClient(f"{url}/rest/v1", headers={**DEFAULT_POSTGREST_CLIENT_HEADERS, "apikey": key, "Authorization": f"Bearer {token}"},
+                               http_client=_query_connections())
 
 
 @functools.lru_cache(maxsize=1)
@@ -798,7 +810,8 @@ def create_clinical_pdf_report(
 
 
 # ---------------------------------------------------------------------------
-# 3. LIVE CONVERSATION STREAMING WEBSOCKET (measured /api/rectify on an RTX 3050: median 297 ms, p90 480 ms, warm)
+# 3. LIVE CONVERSATION STREAMING WEBSOCKET (measured /api/rectify 2026-10-25, RTX 3050, live Supabase, warm: median
+#    873 ms, p90 1122 ms; ASR ~150 ms, the rest is mostly ~220 ms database round trips)
 # ---------------------------------------------------------------------------
 @app.websocket("/ws/rectify")
 async def websocket_speech_rectifier(websocket: WebSocket):

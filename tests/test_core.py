@@ -532,6 +532,19 @@ def test_session_routes_write_scores_with_the_server_key_only():
     assert set(server_db.writes) == {"therapy_sessions", "session_utterances", "patient_profiles"}   # only the server key does
 
 
+def test_patient_queries_reuse_one_connection_but_never_share_a_token(monkeypatch):
+    # a new Supabase client per query cost ~0.7 s, twice per rectify (measured 2026-10-25)
+    import api
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "anon-key")
+    with mock.patch("supabase_manager.SupabaseManager", side_effect=AssertionError("no new Supabase client per query")):
+        a, b = api.user_client("token-a"), api.user_client("token-b")
+    assert a.session is b.session                                   # one pool of open connections
+    assert a.headers["Authorization"] == "Bearer token-a" and b.headers["Authorization"] == "Bearer token-b"
+    assert "Authorization" not in a.session.headers                 # the shared connections carry no one's token
+    assert a.headers["apikey"] == "anon-key" and a.headers["Accept"] == "application/json"
+
+
 def test_a_failed_learning_save_says_the_sentence_was_kept():
     from fastapi.testclient import TestClient
     import api

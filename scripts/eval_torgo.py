@@ -57,7 +57,7 @@ def main(data_dir, mic, limit):
     rows = []
     with open(cache, "a", encoding="utf-8") as out:
         for i, s in enumerate(samples, 1):
-            if s["wav_path"] in done:
+            if "words" in done.get(s["wav_path"], {}):   # rows saved before word confidences were recorded are redone
                 rows.append({**done[s["wav_path"]], "ref": s["text"]})   # recogniser output is cached; the reference is not
                 continue
             audio, sr = sf.read(s["wav_path"], dtype="float32")
@@ -65,11 +65,12 @@ def main(data_dir, mic, limit):
                 audio = audio.mean(axis=1)
             if sr != 16000:
                 audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
-            ungated = asr.transcribe(audio, sample_rate=16000)["text"]
+            heard = asr.transcribe(audio, sample_rate=16000)
+            ungated = heard["text"]
             gated = not contains_speech(audio)
             raw = "" if gated else ungated
             row = {"wav": s["wav_path"], "speaker": s["speaker_id"], "dysarthric": s["is_dysarthric"], "severity": s["severity"],
-                   "ref": s["text"], "ungated": ungated, "gated": gated, "raw": raw,
+                   "ref": s["text"], "ungated": ungated, "words": heard["words"], "gated": gated, "raw": raw,
                    "repaired": repair.repair(raw)["repaired_text"] if raw else ""}
             out.write(json.dumps(row) + "\n")
             out.flush()

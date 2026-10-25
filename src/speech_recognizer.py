@@ -1,8 +1,21 @@
+import threading
 import time
 import torch
 import numpy as np
 import librosa
 from transformers import pipeline
+
+
+def word_confidences(pieces):
+    """[(word piece, probability)] -> [{"word", "confidence"}]; "▁" starts a word, and a word is as unsure as its least sure piece."""
+    out = []
+    for piece, p in pieces:
+        if piece.startswith("▁") or not out:
+            out.append({"word": piece.lstrip("▁"), "confidence": p})
+        else:
+            out[-1]["word"] += piece
+            out[-1]["confidence"] = min(out[-1]["confidence"], p)
+    return [w for w in out if w["word"]]
 
 
 class DysarthriaSpeechRecognizer:
@@ -27,6 +40,17 @@ class DysarthriaSpeechRecognizer:
             device=0 if self.device == "cuda" else -1,
             dtype=self.dtype,
         )
+        self._lock, self._steps = threading.Lock(), []
+        model, update = self.pipe.model, self.pipe.model._update_model_kwargs_for_generation
+
+        def record(outputs, *args, **kwargs):
+            # shortcut: Parakeet's generate() drops per-step scores, so they are read through this transformers internal;
+            # transcribe() cross-checks them against the text and reports words=None if a transformers upgrade breaks it
+            logits = outputs.logits[0, -1, :model.config.vocab_size].float()
+            token = int(logits.argmax())
+            self._steps.append((token, float(torch.softmax(logits, -1)[token])))
+            return update(outputs, *args, **kwargs)
+        model._update_model_kwargs_for_generation = record
         print("[+] Model loaded successfully!")
 
         # Warm-up pass: Pre-compile CUDA kernels so the very first user utterance has 0 cold-start delay
@@ -51,7 +75,7 @@ class DysarthriaSpeechRecognizer:
             max_new_tokens: maximum tokens to generate (avoids default max_length warning).
             
         Returns:
-            dict: { "text": str, "latency_ms": float, "device": str }
+            dict: { "text": str, "words": [{"word": str, "confidence": float}] | None, "latency_ms": float, "device": str }
         """
         if isinstance(audio, torch.Tensor):
             audio = audio.detach().cpu().numpy()
@@ -61,15 +85,26 @@ class DysarthriaSpeechRecognizer:
             audio = librosa.resample(audio, orig_sr=sample_rate, target_sr=16000)
 
         start_time = time.time()
-        with torch.inference_mode():
+        with self._lock, torch.inference_mode():   # one utterance at a time: the step record is shared
+            self._steps = []
             result = self.pipe(
                 {"raw": audio, "sampling_rate": 16000},
                 generate_kwargs={"max_new_tokens": max_new_tokens},
             )
+            steps = self._steps
         latency_ms = (time.time() - start_time) * 1000.0
+
+        tok = self.pipe.tokenizer
+        skip = set(tok.all_special_ids) | {self.pipe.model.config.blank_token_id}   # decode() drops blank, all_special_ids lacks it
+        emitted = [(t, p) for t, p in steps if t not in skip]
+        words = word_confidences([(tok.convert_ids_to_tokens(t), round(p, 3)) for t, p in emitted])
+        if tok.decode([t for t, _ in emitted], skip_special_tokens=True, group_tokens=False).strip() != result["text"].strip():
+            print("[!] Word confidences do not match the transcript; reporting none.")
+            words = None
 
         return {
             "text": result["text"].strip(),
+            "words": words,   # [{"word", "confidence"}] or None; snapping only acts on words the recogniser was unsure of
             "latency_ms": float(latency_ms),
             "device": self.device,
         }

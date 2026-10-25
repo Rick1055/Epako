@@ -17,6 +17,7 @@ No build system is configured. Windows / PowerShell environment. Tests: `python 
 - Fetch the TORGO mini-dataset (streams from U. Toronto archives): `python scripts/fetch_mini_torgo.py`
 - Full TORGO (verified download, selective extraction, audit): `python scripts/fetch_torgo_full.py download | list | extract` (default `--dest D:\DysTTS_TORGO_dataset`; writes `TORGO/manifest.csv` and `TORGO/audit.json`)
 - Real-speech evaluation (speech gate + recogniser + repair, corpus WER with bootstrap CIs, per speaker; resumable via `outputs/eval_torgo_rows.jsonl`): `python scripts/eval_torgo.py [data dir] [--mic wav_headMic] [--limit N]` (a dir with `manifest.csv` is the full TORGO)
+- Attack the LIVE Supabase project as outsider / other patient / unverified and unlinked doctor (throwaway accounts, deleted after; exit 1 if anything gets through): `python scripts/attack_live.py`. API-level attacks run offline in `tests/test_attacks.py`.
 - Learning simulation on cached TORGO output (feedback engine; `--vocabulary` adds snapping): `python scripts/simulate_learning.py [--min-repeats 3] [--vocabulary]`
 - Modules with a `main()` smoke test: `src/data_ingestion.py`, `src/biomarker_engine.py`, `src/synthetic_dysarthria.py` — run directly, e.g. `python src/data_ingestion.py` (expects `data/TORGO` relative to cwd)
 

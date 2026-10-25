@@ -22,7 +22,7 @@ class DysarthriaSpeechRecognizer:
     """
     SOTA Dysarthric Speech Recognizer using Parakeet-TDT (FastConformer).
     Pre-trained on the Speech Accessibility Project (SAP) and fine-tuned for motor speech disorders.
-    Runs in FP16 on NVIDIA GPUs for ultra-low latency (<150ms).
+    Runs in FP16 on NVIDIA GPUs (measured 2026-10-25 on an RTX 3050, real TORGO clips: median 187 ms, p90 326 ms).
     """
 
     def __init__(self, model_name="dys-asr/parakeet-tdt-0.6b-unconstrained-soup", device=None):
@@ -53,7 +53,7 @@ class DysarthriaSpeechRecognizer:
         model._update_model_kwargs_for_generation = record
         print("[+] Model loaded successfully!")
 
-        # Warm-up pass: Pre-compile CUDA kernels so the very first user utterance has 0 cold-start delay
+        # Warm-up pass: compile CUDA kernels now so the first patient does not pay for it
         if self.device == "cuda":
             print("[+] Warming up GPU CUDA kernels...")
             dummy_audio = np.zeros(16000, dtype=np.float32)  # 1 second of silence
@@ -63,7 +63,7 @@ class DysarthriaSpeechRecognizer:
                     generate_kwargs={"max_new_tokens": 16},
                 )
                 torch.cuda.empty_cache()
-            print("[+] GPU warm-up complete! Sub-150ms latency unlocked.")
+            print("[+] GPU warm-up complete.")
 
     def transcribe(self, audio, sample_rate=16000, max_new_tokens=128):
         """

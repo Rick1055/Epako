@@ -33,9 +33,17 @@ class _FakeLimiterDb:
         return mock.Mock(execute=lambda: mock.Mock(data=allowed))
 
 
+@pytest.fixture
+def real_service_client():
+    """Opts a test out of fake_limiter, to inspect the real server-key client (it is never called)."""
+
+
 @pytest.fixture(autouse=True)
-def fake_limiter():
+def fake_limiter(request):
     import api
+    if "real_service_client" in request.fixturenames:
+        yield
+        return
     with mock.patch.object(api, "service_client", return_value=_FakeLimiterDb()):
         yield
 
@@ -444,7 +452,7 @@ class _FakeDb:
     """In-memory stand-in for a Supabase client that records which tables it wrote."""
 
     def __init__(self, tables):
-        self.tables, self.writes = tables, []
+        self.tables, self.writes, self.reads = tables, [], 0
 
     def table(self, name):
         return _FakeQuery(self, name)
@@ -456,8 +464,10 @@ class _FakeDb:
 class _FakeQuery:
     def __init__(self, db, name):
         self.db, self.name, self.filters, self.op, self.payload = db, name, [], "select", None
+        self.columns, self.nested_limit = "*", None
 
-    def select(self, *_):
+    def select(self, columns="*", *_):
+        self.columns = columns
         return self
 
     def eq(self, col, val):
@@ -467,7 +477,9 @@ class _FakeQuery:
     def order(self, *_, **__):
         return self
 
-    def limit(self, _):
+    def limit(self, n, foreign_table=None):
+        if foreign_table:
+            self.nested_limit = n
         return self
 
     def insert(self, row):
@@ -491,7 +503,12 @@ class _FakeQuery:
                 r.update(self.payload)
             self.db.writes.append(self.name)
             return mock.Mock(data=matched)
-        return mock.Mock(data=[dict(r) for r in matched])
+        self.db.reads += 1
+        out = [dict(r) for r in matched]
+        if "session_utterances(" in self.columns:   # a nested read: the row's sentences, newest first
+            for r in out:
+                r["session_utterances"] = [u for u in self.db.tables["session_utterances"] if u.get("patient_id") == r["id"]][::-1][:self.nested_limit]
+        return mock.Mock(data=out)
 
 
 def _session_world():
@@ -543,6 +560,22 @@ def test_patient_queries_reuse_one_connection_but_never_share_a_token(monkeypatc
     assert a.headers["Authorization"] == "Bearer token-a" and b.headers["Authorization"] == "Bearer token-b"
     assert "Authorization" not in a.session.headers                 # the shared connections carry no one's token
     assert a.headers["apikey"] == "anon-key" and a.headers["Accept"] == "application/json"
+
+
+def test_long_lived_database_connections_are_http1(monkeypatch, real_service_client):
+    # over shared HTTP/2 connections 21 of 240 requests failed with "Server disconnected"; over HTTP/1.1, 0 (measured 2026-10-25)
+    import api
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "anon-key")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-key")
+    api.service_client.cache_clear(), api._auth_client.cache_clear()
+    try:
+        pools = {"patient queries": api.user_client("t").session, "server key": api.service_client().postgrest.session,
+                 "sign-in check": api._auth_client().auth._http_client}
+        assert {name: s._transport._pool._http2 for name, s in pools.items()} == dict.fromkeys(pools, False)
+        assert pools["server key"] is not pools["patient queries"]   # the service key never rides the patients' connections
+    finally:
+        api.service_client.cache_clear(), api._auth_client.cache_clear()
 
 
 def test_a_failed_learning_save_says_the_sentence_was_kept():
@@ -639,11 +672,12 @@ def test_rectify_never_plays_the_input_back_as_rectified_when_nothing_was_unders
     asr.transcribe.return_value = {"text": "", "latency_ms": 1.0}
     _as("88888888-8888-8888-8888-888888888888")
     try:
-        with mock.patch.object(api, "contains_speech", return_value=True), mock.patch.object(api, "get_asr_engine", return_value=asr),              mock.patch.object(api, "get_repair_engine", return_value=IntentRepair()):
+        with mock.patch.object(api, "contains_speech", return_value=True), mock.patch.object(api, "get_asr_engine", return_value=asr),              mock.patch.object(api, "get_repair_engine", return_value=IntentRepair()), \
+                mock.patch.object(api, "get_voice", side_effect=api.HTTPException(status_code=503, detail="Voice profile unavailable.")):
             r = TestClient(api.app).post("/api/rectify", json={"audio_base64": _wav_b64()}, headers=AUTH)
     finally:
         api.app.dependency_overrides.clear()
-    assert r.status_code == 200 and r.json()["speech_detected"] is True
+    assert r.status_code == 200 and r.json()["speech_detected"] is True   # a failed voice read does not matter when nothing is said
     assert r.json()["repaired_text"] == "" and r.json()["rectified_audio"] is None   # not the patient's own raw audio
 
 
@@ -699,6 +733,18 @@ def test_rectify_snaps_unsure_words_to_the_patients_words_only_while_they_are_re
     assert voice.await_args_list[1].kwargs["text"] == "Ship."   # the voice says the snapped word
 
 
+def test_the_patients_learning_is_read_in_one_database_request():
+    import api
+    from vocabulary import REPEAT_WINDOW
+    tables, user_db, _ = _session_world()
+    tables["patient_profiles"][0]["vocabulary"] = {"ship": REPEAT_WINDOW}
+    tables["session_utterances"] += [{"patient_id": "p2", "corrected_text": "zebra"}] * REPEAT_WINDOW \
+        + [{"patient_id": "p1", "corrected_text": "ship"}] * REPEAT_WINDOW   # only this patient's sentences count
+    with mock.patch.object(api, "user_client", return_value=user_db):
+        engine = api.get_repair_engine("t", USER)
+    assert user_db.reads == 1 and engine.vocabulary is not None   # one round trip, and it saw the repeats: snapping is on
+
+
 def test_websocket_snaps_unsure_words_too():
     import json
     from fastapi.testclient import TestClient
@@ -720,6 +766,57 @@ def test_websocket_snaps_unsure_words_too():
             while not seen or seen[-1]["type"] == "telemetry":
                 seen.append(ws.receive_json())
     assert seen[-1]["type"] == "rectified_output" and seen[-1]["repaired_text"] == "Ship."
+
+
+def _all_at_once(n):
+    """Each call blocks until n calls are in flight together; run one after another, the first times out (BrokenBarrierError)."""
+    import threading
+    barrier = threading.Barrier(n, timeout=5)
+    return lambda value: (lambda *a, **k: (barrier.wait(), value)[1])
+
+
+def test_rectify_reads_the_patients_learning_and_voice_while_the_recogniser_runs():
+    # each read is a ~220 ms round trip to the database and none depends on what was heard (measured 2026-10-25)
+    from fastapi.testclient import TestClient
+    import api
+    from intent_repair import IntentRepair
+    together = _all_at_once(3)
+    asr = mock.Mock()
+    asr.transcribe.side_effect = together({"text": "hello", "words": None, "latency_ms": 1.0})
+    voice = mock.AsyncMock(return_value={"audio": np.zeros(1600, dtype="float32"), "latency_ms": 1.0})
+    _as(USER)
+    try:
+        with mock.patch.object(api, "contains_speech", return_value=True), mock.patch.object(api, "get_asr_engine", return_value=asr), \
+                mock.patch.object(api, "get_repair_engine", side_effect=together(IntentRepair())), \
+                mock.patch.object(api, "get_voice", side_effect=together({})), mock.patch.object(api, "synthesize_neural_async", voice):
+            r = TestClient(api.app).post("/api/rectify", json={"audio_base64": _wav_b64()}, headers=AUTH)
+    finally:
+        api.app.dependency_overrides.clear()
+    assert r.status_code == 200 and r.json()["repaired_text"] == "Hello." and voice.await_args.kwargs["text"] == "Hello."
+
+
+def test_websocket_reads_the_patients_learning_and_voice_while_the_recogniser_runs():
+    import json
+    from fastapi.testclient import TestClient
+    import api
+    from intent_repair import IntentRepair
+    together = _all_at_once(3)
+    asr = mock.Mock()
+    asr.transcribe.side_effect = together({"text": "hello", "words": None, "latency_ms": 1.0})
+    voice = mock.AsyncMock(return_value={"audio": np.zeros(1600, dtype="float32"), "latency_ms": 1.0})
+    loud = (rng.standard_normal(1600) * 0.3 * 32767).astype("int16").tobytes()
+    quiet = np.zeros(1600, dtype="int16").tobytes()
+    with mock.patch.object(api, "verify_token", return_value=mock.Mock(id="ws-user-5")), mock.patch.object(api, "contains_speech", return_value=True), \
+            mock.patch.object(api, "get_asr_engine", return_value=asr), mock.patch.object(api, "synthesize_neural_async", voice), \
+            mock.patch.object(api, "get_repair_engine", side_effect=together(IntentRepair())), mock.patch.object(api, "get_voice", side_effect=together({})):
+        with TestClient(api.app).websocket_connect("/ws/rectify") as ws:
+            ws.send_text(json.dumps({"type": "auth", "token": "t", "sample_rate": 16000, "encoding": "pcm_s16le"}))
+            for chunk in [loud] * 6 + [quiet] * 8:
+                ws.send_bytes(chunk)
+            seen = []
+            while not seen or seen[-1]["type"] == "telemetry":
+                seen.append(ws.receive_json())
+    assert seen[-1]["type"] == "rectified_output" and seen[-1]["repaired_text"] == "Hello." and seen[-1]["audio_base64"]
 
 
 def test_a_slow_repair_does_not_freeze_other_requests():

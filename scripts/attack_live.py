@@ -2,16 +2,23 @@
 Attacks the LIVE Supabase project directly (no API in between, as a hacker would) with throwaway accounts:
 an anonymous outsider, patients A and B, an unverified "doctor" and a verified doctor A never linked.
 
-    python scripts/attack_live.py
+    python scripts/attack_live.py [--api http://127.0.0.1:8000]
+
+With --api it also attacks a running API server, where every patient's queries share one pool of open connections:
+patients and the doctor reach for each other's sessions through the API, many requests at once, so a token that
+leaked from one request into another would show up as a 200 for the wrong person or a 404 for the owner.
 
 Needs SUPABASE_URL, SUPABASE_KEY (anon) and SUPABASE_SERVICE_ROLE_KEY in .env. Accounts sign in with an admin-made
 magic link, so CAPTCHA can stay on. Every account (and with it every row) is deleted at the end. Exit code 1 if any
 attack got through. The same rules are attacked offline on every migration in tests/test_rls.py.
 """
+import argparse
 import os
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
+import requests
 from dotenv import load_dotenv
 from supabase import create_client
 
@@ -41,7 +48,30 @@ def refused(fn):
     return (not ok) or out in ([], 0, None, False), out
 
 
+def attack_api(api, token, sess, names):
+    """token: {user: access token}; sess: {patient user: their session id}. Runs while the accounts exist."""
+    (ua, ub), doctor = list(sess), next(u for u in token if u not in sess)
+    finish = lambda who, owner: requests.post(f"{api}/api/sessions/{sess[owner]}/finish",
+                                              headers={"Authorization": f"Bearer {token[who]}"}, timeout=60).status_code
+    for who, name in ((ub, "patient B"), (doctor, "unlinked doctor")):
+        h = {"Authorization": f"Bearer {token[who]}"}
+        check(f"API: {name} writes into patient A's session", requests.post(f"{api}/api/sessions/{sess[ua]}/utterances", headers=h, timeout=60,
+              json={"raw_transcript": "x", "shown_text": "x", "final_text": "x"}).status_code == 404)
+        check(f"API: {name} gets patient A's session report", requests.post(f"{api}/api/session/report/pdf", headers=h, timeout=60,
+              json={"session_id": sess[ua]}).status_code == 404)
+        check(f"API: {name} finishes patient A's session", finish(who, ua) == 404)
+    # many requests at once over the shared connections: every owner must get 200 and every intruder 404
+    jobs = [(who, owner) for _ in range(6) for who in (ua, ub) for owner in (ua, ub)]
+    with ThreadPoolExecutor(8) as pool:
+        got = list(pool.map(lambda j: (j, finish(*j)), jobs))
+    wrong = [(names[w], names[o], s) for (w, o), s in got if s != (200 if w == o else 404)]
+    check(f"API: {len(jobs)} simultaneous requests from two patients never cross", not wrong, wrong)
+
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--api", help="also attack a running API server at this URL, e.g. http://127.0.0.1:8000")
+    api = parser.parse_args().api
     if not (URL and ANON and SERVICE) or ANON == SERVICE:
         sys.exit("Set SUPABASE_URL, SUPABASE_KEY (anon) and SUPABASE_SERVICE_ROLE_KEY in .env")
     admin, users = create_client(URL, SERVICE), []
@@ -55,7 +85,7 @@ def main():
         return u.id, c
 
     try:
-        (ua, a), (ub, _), (uu, unverified), (uv, doctor) = account(), account(), account(), account()   # B is only a victim
+        (ua, a), (ub, b), (uu, unverified), (uv, doctor) = account(), account(), account(), account()   # B is the victim, except with --api
         pid = {u: admin.table("patient_profiles").select("id").eq("user_id", u).execute().data[0]["id"] for u in (ua, ub)}
         sess = {u: admin.table("therapy_sessions").insert({"patient_id": pid[u]}).execute().data[0]["id"] for u in (ua, ub)}
         for u in (ua, ub):
@@ -111,6 +141,9 @@ def main():
         uploaded = attempt(lambda: audio.upload(f"{ua}/consented.wav", b"RIFF", {"content-type": "audio/wav"}))[0]
         print(f"sanity: patient A sees own sessions={len(own) == 1}, saves own voice={bool(saved)}, uploads after consenting={uploaded}")
         results.append(len(own) == 1 and bool(saved) and uploaded)
+        if api:
+            attack_api(api, {u: c.auth.get_session().access_token for u, c in ((ua, a), (ub, b), (uv, doctor))},
+                       {ua: sess[ua], ub: sess[ub]}, {ua: "patient A", ub: "patient B"})
         if has_vocab:   # last: if it gets through it erases A's rows
             check("patient A deletes their profile row, leaving audio behind (migration 20261031)", *refused(lambda: a.table("patient_profiles").delete().eq("id", pid[ua]).execute().data))
     finally:

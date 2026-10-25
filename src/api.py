@@ -97,14 +97,13 @@ def get_repair_engine(token, user_id):
         from feedback_engine import FeedbackEngine
         from intent_repair import IntentRepair
         from vocabulary import REPEAT_WINDOW, Vocabulary
-        client = user_client(token)
-        rows = client.table("patient_profiles").select("id, phonetic_corrections, vocabulary").eq("user_id", user_id).execute().data
+        # one round trip: the profile with its newest confirmed sentences nested in it
+        rows = user_client(token).table("patient_profiles").select(
+            "id, phonetic_corrections, vocabulary, session_utterances(corrected_text, created_at)").eq("user_id", user_id) \
+            .order("created_at", desc=True, foreign_table="session_utterances").limit(REPEAT_WINDOW, foreign_table="session_utterances").execute().data
         row = rows[0] if rows else {}
-        vocab, recent = Vocabulary(row.get("vocabulary") or {}), []
-        if row:
-            said = client.table("session_utterances").select("corrected_text").eq("patient_id", row["id"]) \
-                .order("created_at", desc=True).limit(REPEAT_WINDOW).execute().data
-            recent = [u["corrected_text"] or "" for u in reversed(said)]
+        vocab = Vocabulary(row.get("vocabulary") or {})
+        recent = [u["corrected_text"] or "" for u in reversed(row.get("session_utterances") or [])]
         return IntentRepair(FeedbackEngine(row.get("phonetic_corrections") or {}), vocab if vocab.repeating(recent) else None)
     except Exception as e:
         raise fail(503, "Repair engine unavailable.", e)
@@ -150,12 +149,18 @@ def verify_token(token: str):
     return res.user
 
 
-@functools.lru_cache(maxsize=1)
-def _query_connections():
-    """One pool of open connections for every patient query: a new Supabase client per query cost ~0.7 s (measured 2026-10-25)."""
+def _connections():
+    """A pool of open HTTP/1.1 connections. Over long-lived HTTP/2 ones, 21 of 240 requests failed with "Server
+    disconnected" when Supabase dropped a connection; over HTTP/1.1, 0 (measured 2026-10-25)."""
     import httpx
     from postgrest.constants import DEFAULT_POSTGREST_CLIENT_TIMEOUT
-    return httpx.Client(http2=True, follow_redirects=True, timeout=DEFAULT_POSTGREST_CLIENT_TIMEOUT)
+    return httpx.Client(http2=False, follow_redirects=True, timeout=DEFAULT_POSTGREST_CLIENT_TIMEOUT)
+
+
+@functools.lru_cache(maxsize=1)
+def _query_connections():
+    """One pool for every patient query: a new Supabase client per query cost ~0.7 s (measured 2026-10-25)."""
+    return _connections()
 
 
 def user_client(token: str):
@@ -174,10 +179,11 @@ def user_client(token: str):
 def service_client():
     """Server-only writer for tables clients may not write (biomarker_logs). Never expose this key."""
     from supabase import create_client
+    from supabase.lib.client_options import SyncClientOptions
     url, key = os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
         raise HTTPException(status_code=503, detail="Server write access is not configured.")
-    return create_client(url, key)
+    return create_client(url, key, options=SyncClientOptions(httpx_client=_connections()))   # its own pool, not the patients'
 
 
 def fail(status: int, public: str, exc: Exception) -> HTTPException:
@@ -188,8 +194,12 @@ def fail(status: int, public: str, exc: Exception) -> HTTPException:
 
 @functools.lru_cache(maxsize=1)
 def _auth_client():
-    from supabase_manager import SupabaseManager
-    return SupabaseManager().client
+    from supabase import create_client
+    from supabase.lib.client_options import SyncClientOptions
+    url, key = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/"), (os.getenv("SUPABASE_KEY") or "").strip()
+    if not url or not key:
+        raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set")   # verify_token turns this into a 503
+    return create_client(url, key, options=SyncClientOptions(httpx_client=_connections()))
 
 
 def _password_ok(email, password) -> bool:
@@ -400,14 +410,16 @@ async def rectify_speech(
             "telemetry": None,
         }
 
-    # 1. Transcribe using Dysarthria ASR
+    # 1. Transcribe using Dysarthria ASR, reading the patient's learning and voice from the database meanwhile
     asr = await asyncio.to_thread(get_asr_engine)
-    asr_res = await asyncio.to_thread(asr.transcribe, audio, sample_rate=16000)
+    asr_res, repair_eng, (voice, voice_failure) = await asyncio.gather(
+        asyncio.to_thread(asr.transcribe, audio, sample_rate=16000),
+        asyncio.to_thread(get_repair_engine, authorization.partition(' ')[2], user.id),
+        attempt(get_voice, authorization.partition(' ')[2], user.id))
     raw_transcript = asr_res.get("text", "")
     asr_latency = asr_res.get("latency_ms", 0.0)
 
     # 2. Intent & Dysfluency Repair
-    repair_eng = await asyncio.to_thread(get_repair_engine, authorization.partition(' ')[2], user.id)
     repair_res = await asyncio.to_thread(repair_eng.repair, raw_transcript, asr_res.get("words"))   # snapping calls espeak: seconds on a cold cache
     repaired_text = repair_res.get("repaired_text", raw_transcript)
     repair_latency = repair_res.get("latency_ms", 1.0)
@@ -418,12 +430,10 @@ async def rectify_speech(
     voice_error = None
 
     if repaired_text:
-        try:
-            voice = await asyncio.to_thread(get_voice, authorization.partition(' ')[2], user.id)
-        except HTTPException as e:
-            if e.status_code != 422:
-                raise
-            voice_error = e.detail   # broken saved voice: the text still goes back, spoken in no other voice
+        if voice_failure is not None:
+            if voice_failure.status_code != 422:
+                raise voice_failure
+            voice_error = voice_failure.detail   # broken saved voice: the text still goes back, spoken in no other voice
         else:
             synth_res = await synthesize_neural_async(text=repaired_text, **voice)
             synth_latency = synth_res.get("latency_ms", 0.0)
@@ -481,6 +491,14 @@ async def extract_clinical_biomarkers(file: UploadFile = File(...)):
         raise fail(503, "Biomarker engine unavailable.", e)
 
     return {"success": True, "biomarkers": results}
+
+
+async def attempt(fn, *args):
+    """(result, None) or (None, HTTPException) from fn in a worker thread: the failure is acted on only if the result is needed."""
+    try:
+        return await asyncio.to_thread(fn, *args), None
+    except HTTPException as e:
+        return None, e
 
 
 def voice_settings(p: Dict[str, Any]) -> Dict[str, Any]:
@@ -810,8 +828,9 @@ def create_clinical_pdf_report(
 
 
 # ---------------------------------------------------------------------------
-# 3. LIVE CONVERSATION STREAMING WEBSOCKET (measured /api/rectify 2026-10-25, RTX 3050, live Supabase, warm: median
-#    873 ms, p90 1122 ms; ASR ~150 ms, the rest is mostly ~220 ms database round trips)
+# 3. LIVE CONVERSATION STREAMING WEBSOCKET (measured /api/rectify 2026-10-25, RTX 3050 on mains power, live Supabase,
+#    warm: the patient waits median 772 ms, p90 1190 ms; ~480 ms of it is the sign-in check and rate limit, two ~220 ms
+#    database round trips; ASR median ~140 ms. On battery the GPU is up to 10x slower)
 # ---------------------------------------------------------------------------
 @app.websocket("/ws/rectify")
 async def websocket_speech_rectifier(websocket: WebSocket):
@@ -926,21 +945,20 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                     continue
 
                 asr = await asyncio.to_thread(get_asr_engine)
-                asr_res = await asyncio.to_thread(asr.transcribe, utterance_audio, sample_rate=16000)
+                asr_res, repair, (voice, voice_failure) = await asyncio.gather(   # database reads run while the recogniser does
+                    asyncio.to_thread(asr.transcribe, utterance_audio, sample_rate=16000),
+                    asyncio.to_thread(get_repair_engine, auth_msg['token'], user.id),
+                    attempt(get_voice, auth_msg['token'], user.id))
                 raw_text = asr_res.get("text", "")
-
-                repair = await asyncio.to_thread(get_repair_engine, auth_msg['token'], user.id)
                 repaired = (await asyncio.to_thread(repair.repair, raw_text, asr_res.get("words"))).get("repaired_text", raw_text)
 
                 audio_b64, voice_error = None, None  # nothing understood: no audio, never the patient's own recording as "rectified"
                 if repaired:
-                    try:
-                        voice = await asyncio.to_thread(get_voice, auth_msg['token'], user.id)
-                    except HTTPException as e:
-                        if e.status_code != 422:
-                            await websocket.send_json({"type": "error", "detail": e.detail})
+                    if voice_failure is not None:
+                        if voice_failure.status_code != 422:
+                            await websocket.send_json({"type": "error", "detail": voice_failure.detail})
                             continue
-                        voice_error = e.detail   # broken saved voice: the text still goes out, spoken in no other voice
+                        voice_error = voice_failure.detail   # broken saved voice: the text still goes out, spoken in no other voice
                     else:
                         synth = await synthesize_neural_async(repaired, **voice)
                         audio_b64 = audio_to_base64_wav(synth["audio"], 16000)

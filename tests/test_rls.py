@@ -2,6 +2,7 @@
 Skipped unless `pgserver` and `psycopg2` are installed (pip install pgserver psycopg2-binary).
 Fidelity limit: auth.uid()/roles/storage are minimal stand-ins (tests/rls_bootstrap.sql), not Supabase itself."""
 import itertools
+import shutil
 import tempfile
 import uuid
 from pathlib import Path
@@ -40,7 +41,8 @@ class Db:
 
 @pytest.fixture(scope="module")
 def server_and_template():
-    srv = pgserver.get_server(tempfile.mkdtemp(prefix="rls_pg_"))
+    data_dir = tempfile.mkdtemp(prefix="rls_pg_")
+    srv = pgserver.get_server(data_dir)
     base = parse_dsn(srv.get_uri())
     admin = Db({**base, "dbname": "postgres"})
     admin.q(None, None, "create database tmpl")
@@ -51,6 +53,7 @@ def server_and_template():
     tmpl.conn.close()
     yield admin, base
     srv.cleanup()
+    shutil.rmtree(data_dir, ignore_errors=True)  # cleanup() stops Postgres but leaves ~350 MB behind
 
 
 @pytest.fixture

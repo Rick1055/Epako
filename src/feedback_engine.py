@@ -1,8 +1,11 @@
 import difflib
+import heapq
 import re
 
 MIN_CONFIRMATIONS = 2   # a correction must be confirmed this many times before it is applied
 MIN_CONFIDENCE = 0.6    # and be right at least this often
+MAX_WORD_LETTERS = 45   # longest dictionary word (pneumonoultramicroscopicsilicovolcanoconiosis); longer is junk, never stored
+MAX_CORRECTIONS = 5000  # rules kept: even full of 45-letter words the table stays below its 1 MB database limit
 
 
 def words(text):
@@ -51,6 +54,8 @@ class FeedbackEngine:
         for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, raw, final).get_opcodes():
             if op == "replace" and i2 - i1 == j2 - j1:  # shortcut: only 1-to-1 word swaps are learned
                 for heard, meant in zip(raw[i1:i2], final[j1:j2]):
+                    if max(len(heard), len(meant)) > MAX_WORD_LETTERS:
+                        continue
                     e = self.table.get(heard)
                     if e is None or e["to"] == meant:
                         e = self.table.setdefault(heard, {"to": meant, "ok": 0, "bad": 0})
@@ -59,5 +64,9 @@ class FeedbackEngine:
                         e["bad"] += heard not in penalised  # already punished above
                         if e["bad"] > e["ok"]:
                             self.table[heard] = {"to": meant, "ok": 1, "bad": 0}
+
+        if len(self.table) > MAX_CORRECTIONS:   # least-confirmed rules go first; on a tie the older one
+            kept = {k for _, (k, _) in heapq.nlargest(MAX_CORRECTIONS, enumerate(self.table.items()), key=lambda e: (e[1][1]["ok"], e[0]))}
+            self.table = {k: e for k, e in self.table.items() if k in kept}
 
         return max(0.0, 1.0 - wrong / max(len(final), 1))

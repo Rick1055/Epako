@@ -61,6 +61,13 @@ def test_confirmed_text_is_counted_word_by_word():
     assert v.counts == {"the": 2, "ship": 2}
 
 
+def test_words_no_dictionary_has_are_not_counted():
+    from feedback_engine import MAX_WORD_LETTERS
+    v = Vocabulary()
+    v.add("ship " + "a" * (MAX_WORD_LETTERS + 1) + " " + "b" * MAX_WORD_LETTERS)
+    assert v.counts == {"ship": 1, "b" * MAX_WORD_LETTERS: 1}
+
+
 def test_a_word_the_recogniser_was_sure_of_is_never_snapped():
     assert Vocabulary({"ship": 5}).snap("chip and sip", {"sip"}) == "chip and ship"   # "chip" is as close, but was heard surely
 

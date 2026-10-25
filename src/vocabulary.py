@@ -8,10 +8,10 @@ import heapq
 import re
 
 try:
-    from .feedback_engine import words
+    from .feedback_engine import MAX_WORD_LETTERS, words
     from .local_tts import ESPEAK_LOCK
 except ImportError:
-    from feedback_engine import words
+    from feedback_engine import MAX_WORD_LETTERS, words
     from local_tts import ESPEAK_LOCK
 
 # Set on TORGO speakers F03, M02, M05 and reported once on F01, F04, M01, M03, M04 (2026-10-25, scripts/simulate_learning.py):
@@ -72,6 +72,8 @@ class Vocabulary:
 
     def add(self, text):
         for w in words(text):
+            if len(w) > MAX_WORD_LETTERS:
+                continue
             self.counts[w] = self.counts.pop(w, 0) + 1   # re-inserted: the newest word wins a tie when pruning
         if len(self.counts) > MAX_WORDS:
             self.counts = dict(self._most_used())

@@ -157,6 +157,40 @@ def test_feedback_learns_rewards_and_penalises():
     assert FeedbackEngine().learn("x", "same", "same") == 1.0
 
 
+def test_feedback_learns_nothing_from_words_no_dictionary_has():
+    from feedback_engine import MAX_WORD_LETTERS, FeedbackEngine
+    junk = "a" * (MAX_WORD_LETTERS + 1)
+    fb = FeedbackEngine()
+    fb.learn(f"{junk} cat", f"{junk} cat", "ship cat")   # heard too long
+    fb.learn("sip cat", "sip cat", f"{junk} cat")        # meant too long
+    assert fb.table == {}
+    fb.learn("pneumonoultramicroscopicsilicovolcanoconiosis", "x", "silicosis")   # 45 letters: a real word, still learned
+    assert "pneumonoultramicroscopicsilicovolcanoconiosis" in fb.table
+
+
+def test_a_full_correction_table_drops_its_least_confirmed_oldest_rules_first():
+    from feedback_engine import MAX_CORRECTIONS, FeedbackEngine
+    table = {"wun": {"to": "one", "ok": 5, "bad": 0}}   # learned long ago and in real use
+    table.update({f"noise{i}": {"to": f"x{i}", "ok": 1, "bad": 0} for i in range(MAX_CORRECTIONS)})
+    fb = FeedbackEngine(table)
+    fb.learn("sip", "sip", "ship")   # one more new lesson
+    assert len(fb.table) == MAX_CORRECTIONS
+    assert fb.apply("wun") == "one" and "sip" in fb.table          # the trusted rule and the newest lesson stay
+    assert "noise0" not in fb.table and "noise1" not in fb.table   # the oldest one-off rules go
+
+
+def test_both_learned_tables_fit_their_database_limits_even_full_of_the_longest_words():
+    import json
+    from feedback_engine import MAX_CORRECTIONS, MAX_WORD_LETTERS
+    from vocabulary import MAX_WORDS
+    word = lambda i: f"{i:06d}".rjust(MAX_WORD_LETTERS, "w")
+    big = 10**9   # counts far beyond any real use
+    corrections = {word(i): {"to": word(i), "ok": big, "bad": big} for i in range(MAX_CORRECTIONS)}
+    vocabulary = {word(i): big for i in range(MAX_WORDS)}
+    # migration 20261031 measures octet_length(jsonb::text), which is formatted like json.dumps
+    assert len(json.dumps(corrections)) <= 1_000_000 and len(json.dumps(vocabulary)) <= 200_000
+
+
 def test_repair_uses_learned_table():
     from feedback_engine import FeedbackEngine
     table = {"wun": {"to": "one", "ok": 3, "bad": 0}}
@@ -498,6 +532,29 @@ def test_session_routes_write_scores_with_the_server_key_only():
     assert set(server_db.writes) == {"therapy_sessions", "session_utterances", "patient_profiles"}   # only the server key does
 
 
+def test_a_failed_learning_save_says_the_sentence_was_kept():
+    from fastapi.testclient import TestClient
+    import api
+    tables, user_db, server_db = _session_world()
+    real_table = server_db.table
+
+    def table(name):
+        q = real_table(name)
+        if name == "patient_profiles":
+            q.update = mock.Mock(side_effect=RuntimeError("database briefly down"))
+        return q
+    server_db.table = table
+    _as(USER)
+    try:
+        with mock.patch.object(api, "user_client", return_value=user_db), mock.patch.object(api, "service_client", return_value=server_db):
+            r = TestClient(api.app, raise_server_exceptions=False).post(
+                f"/api/sessions/{MINE}/utterances", headers=AUTH, json={"raw_transcript": "wun", "shown_text": "wun", "final_text": "one"})
+    finally:
+        api.app.dependency_overrides.clear()
+    assert r.status_code == 503 and "saved" in r.json()["detail"] and "learning" in r.json()["detail"]
+    assert len(tables["session_utterances"]) == 1   # true: the sentence itself is stored
+
+
 def test_analyze_stores_biomarkers_with_the_server_key_for_own_sessions_only():
     import io
     import soundfile as sf
@@ -652,7 +709,45 @@ def test_websocket_snaps_unsure_words_too():
     assert seen[-1]["type"] == "rectified_output" and seen[-1]["repaired_text"] == "Ship."
 
 
-SAVED_VOICE = {"template": "female_warm_gentle", "pitch_hz": 10, "rate_pct": -5, "volume_pct": 0, "warmth_pct": 12, "roughness_pct": 4}
+def test_a_slow_repair_does_not_freeze_other_requests():
+    # snapping looks words up in espeak: 7 s with a cold cache and 1,440 known words (measured 2026-10-25)
+    import asyncio
+    import threading
+    import httpx
+    import api
+    started, other_answered, waited = threading.Event(), threading.Event(), []
+
+    class SlowRepair:
+        def repair(self, text, recognised=None):
+            started.set()
+            waited.append(other_answered.wait(timeout=3))   # True only if the server answered /health meanwhile
+            return {"repaired_text": text, "latency_ms": 1.0}
+
+    asr = mock.Mock()
+    asr.transcribe.return_value = {"text": "hello", "words": None, "latency_ms": 1.0}
+    voice = mock.AsyncMock(return_value={"audio": np.zeros(1600, dtype="float32"), "latency_ms": 1.0})
+
+    async def both():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api.app), base_url="http://t") as c:
+            async def other():
+                while not started.is_set():
+                    await asyncio.sleep(0.01)
+                await c.get("/health")
+                other_answered.set()
+            await asyncio.gather(c.post("/api/rectify", json={"audio_base64": _wav_b64()}, headers=AUTH), other())
+
+    _as(USER)
+    try:
+        with mock.patch.object(api, "contains_speech", return_value=True), mock.patch.object(api, "get_asr_engine", return_value=asr), \
+                mock.patch.object(api, "get_repair_engine", return_value=SlowRepair()), mock.patch.object(api, "get_voice", return_value={}), \
+                mock.patch.object(api, "synthesize_neural_async", voice):
+            asyncio.run(both())
+    finally:
+        api.app.dependency_overrides.clear()
+    assert waited == [True]
+
+
+SAVED_VOICE ={"template": "female_warm_gentle", "pitch_hz": 10, "rate_pct": -5, "volume_pct": 0, "warmth_pct": 12, "roughness_pct": 4}
 
 
 def _voice_world(voice_profile):
@@ -705,19 +800,22 @@ def test_rectify_speaks_with_the_saved_voice_not_settings_sent_in_the_request():
                                        "volume": "+0%", "warmth": 12, "roughness": 4}
 
 
-def test_rectify_uses_the_default_voice_until_one_is_saved_and_refuses_a_corrupted_one():
+def test_rectify_uses_the_default_voice_until_one_is_saved_and_never_another_voice_for_a_corrupted_one():
     r, voice = _rectify_voice({})
     assert r.status_code == 200 and voice.await_args.kwargs["voice"] == "en_US-ryan-medium" and voice.await_args.kwargs["warmth"] == 0
+    assert r.json()["voice_error"] is None
     bad, voice = _rectify_voice({**SAVED_VOICE, "warmth_pct": 68})   # written straight to the database, around the API
-    assert bad.status_code == 422 and "voice profile" in bad.json()["detail"] and not voice.await_args_list
+    assert bad.status_code == 200 and bad.json()["repaired_text"] == "Hello."   # the patient still gets their sentence
+    assert bad.json()["rectified_audio"] is None and "voice profile" in bad.json()["voice_error"] and not voice.await_args_list
 
 
-def test_websocket_speaks_with_the_saved_voice():
+@pytest.mark.parametrize("saved", [SAVED_VOICE, {**SAVED_VOICE, "template": "removed_in_an_update"}], ids=["valid", "corrupted"])
+def test_websocket_speaks_with_the_saved_voice_or_sends_the_text_alone(saved):
     import json
     from fastapi.testclient import TestClient
     import api
     from intent_repair import IntentRepair
-    _, user_db = _voice_world(SAVED_VOICE)
+    _, user_db = _voice_world(saved)
     asr = mock.Mock()
     asr.transcribe.return_value = {"text": "hello", "words": None, "latency_ms": 1.0}
     voice = mock.AsyncMock(return_value={"audio": np.zeros(1600, dtype="float32"), "latency_ms": 1.0})
@@ -733,8 +831,13 @@ def test_websocket_speaks_with_the_saved_voice():
             seen = []
             while not seen or seen[-1]["type"] == "telemetry":
                 seen.append(ws.receive_json())
-    assert seen[-1]["type"] == "rectified_output"
-    assert voice.await_args.kwargs["voice"] == "en_US-lessac-medium" and voice.await_args.kwargs["warmth"] == 12
+    out = seen[-1]
+    assert out["type"] == "rectified_output" and out["repaired_text"] == "Hello."
+    if saved == SAVED_VOICE:
+        assert out["voice_error"] is None and out["audio_base64"]
+        assert voice.await_args.kwargs["voice"] == "en_US-lessac-medium" and voice.await_args.kwargs["warmth"] == 12
+    else:
+        assert "voice profile" in out["voice_error"] and out["audio_base64"] is None and not voice.await_args_list
 
 
 def test_sculpt_preview_rejects_out_of_range_values_and_applies_warmth_and_roughness():
@@ -751,6 +854,22 @@ def test_sculpt_preview_rejects_out_of_range_values_and_applies_warmth_and_rough
         api.app.dependency_overrides.clear()
     assert too_warm.status_code == 422 and ok.status_code == 200
     assert voice.await_args.kwargs["warmth"] == 12 and voice.await_args.kwargs["roughness"] == 4
+
+
+def test_a_missing_voice_engine_is_a_clear_503_not_a_crash():
+    from fastapi.testclient import TestClient
+    import api
+    _, user_db = _voice_world(SAVED_VOICE)
+    _as(USER)
+    try:
+        with mock.patch.object(api, "get_restoration_engine", return_value=None), mock.patch.object(api, "user_client", return_value=user_db):
+            c = TestClient(api.app, raise_server_exceptions=False)
+            put, sculpt = c.put("/api/voice/profile", headers=AUTH, json=SAVED_VOICE), c.post("/api/voice/sculpt", headers=AUTH, json=SAVED_VOICE)
+            with pytest.raises(api.HTTPException) as e:   # rectify and the websocket read the voice through this
+                api.get_voice("t", USER)
+    finally:
+        api.app.dependency_overrides.clear()
+    assert put.status_code == sculpt.status_code == e.value.status_code == 503
 
 
 def test_voice_banking_returns_a_profile_that_can_be_saved_as_is(tmp_path):

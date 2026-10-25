@@ -34,6 +34,8 @@ RPCs: `create_link_code() -> text` (patient, 10 chars, valid 15 min, one live co
 ## Correction table (`patient_profiles.phonetic_corrections`)
 
 `{ "<heard word>": { "to": "<intended word>", "ok": int, "bad": int } }` — applied only when `ok >= 2` and `ok/(ok+bad) >= 0.6`.
+At most `MAX_CORRECTIONS` rules (the least-confirmed, then oldest, go first); words over `MAX_WORD_LETTERS` are never
+stored, here or in the vocabulary, so both fields stay within their database limits however long a patient uses the app.
 Owner of the logic: `src/feedback_engine.py` (`FeedbackEngine.apply` / `.learn`). Nothing else writes this field.
 
 ## Voice profile (`patient_profiles.voice_profile`)
@@ -41,8 +43,9 @@ Owner of the logic: `src/feedback_engine.py` (`FeedbackEngine.apply` / `.learn`)
 `{ "template": <key of VoiceRestorationEngine.voice_palette>, "pitch_hz": -100..100, "rate_pct": -50..100,
 "volume_pct": -50..50, "warmth_pct": -20..20, "roughness_pct": 0..20 }` (`api.VoiceProfile`); `{}` means the default
 voice. Saved through `PUT /api/voice/profile`; `/api/rectify` and `/ws/rectify` always speak with it and ignore any
-voice settings in the request. A stored profile outside these ranges (written around the API) is refused with 422,
-never replaced silently. Warmth tilts the tone (darker +), roughness adds breath-like texture (`local_tts.shape_voice`).
+voice settings in the request. A stored profile outside these ranges (written around the API, or naming a template a
+later version removed) is never replaced by another voice: rectify still returns the text, with `rectified_audio: null`
+and `voice_error` asking the patient to save their voice again. Warmth tilts the tone (darker +), roughness adds breath-like texture (`local_tts.shape_voice`).
 
 ## Vocabulary (`patient_profiles.vocabulary`)
 
@@ -59,12 +62,12 @@ Owner of the logic: `src/vocabulary.py`; written only by `POST /api/sessions/{id
 | Route | Request | Response |
 |---|---|---|
 | `POST /api/sessions` | — | `{session_id}` |
-| `POST /api/sessions/{id}/utterances` | `{raw_transcript, shown_text, final_text, latency_ms?}` (`final_text == shown_text` means "yes") | `{confirmed, reward}` (`reward` = 1 − wrong words / words meant) |
+| `POST /api/sessions/{id}/utterances` | `{raw_transcript, shown_text, final_text, latency_ms?}` (`final_text == shown_text` means "yes") | `{confirmed, reward}` (`reward` = 1 − wrong words / words meant); 503 "saved, but learning failed" if only the sentence was stored |
 | `POST /api/sessions/{id}/finish` | — | `{duration_seconds, utterances_count, accuracy_rate}` |
 | `POST /api/session/analyze` | form: `session_id`, `file` (audio) | `{success, biomarkers}`; needs `SUPABASE_SERVICE_ROLE_KEY` |
 | `POST /api/session/report/pdf` | `{session_id, inline?}` | PDF; 422 if no assessment or unmeasured values |
 | `DELETE /api/me/data` | `{confirm: "DELETE", password?}` (email accounts must send the password; passwordless accounts need a sign-in within 5 minutes) | `{success}`; audio first, then account; 3 per hour |
-| `POST /api/rectify` | audio (multipart or base64 JSON) | `{speech_detected, raw_transcript, repaired_text, rectified_audio, latency, telemetry}`. If no speech is detected (silence, noise) or nothing was understood, the text is `""` and `rectified_audio` is `null`: the patient's own recording is never returned as "rectified". `WS /ws/rectify` sends `{"type": "no_speech"}` instead of `rectified_output`, and `{"type": "error", "detail"}` if the saved voice profile is invalid. Both speak with the saved voice profile |
+| `POST /api/rectify` | audio (multipart or base64 JSON) | `{speech_detected, raw_transcript, repaired_text, rectified_audio, voice_error, latency, telemetry}`. If no speech is detected (silence, noise) or nothing was understood, the text is `""` and `rectified_audio` is `null`: the patient's own recording is never returned as "rectified". `WS /ws/rectify` sends `{"type": "no_speech"}` instead of `rectified_output`, whose `voice_error` works as above. Both speak with the saved voice profile, or not at all |
 | `PUT /api/voice/profile` | a voice profile (see above) | `{success, profile}`; 422 if out of range |
 | `POST /api/biomarkers`, `/api/voice/sculpt`, `/api/voice/bank`, `GET /health`, `WS /ws/rectify` | see `src/api.py` | |
 

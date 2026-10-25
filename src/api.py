@@ -303,7 +303,7 @@ class VoiceProfile(BaseModel):
     def known_template(cls, v):
         engine = get_restoration_engine()
         if engine is None:
-            raise RuntimeError("Voice restoration engine unavailable.")   # a server fault, not a bad profile: not a ValueError
+            raise HTTPException(status_code=503, detail="Voice engine unavailable.")   # a server fault, not a bad profile: not a ValueError
         if v not in engine.voice_palette:
             raise ValueError("unknown voice template")
         return v
@@ -383,6 +383,7 @@ async def rectify_speech(
             "raw_transcript": "",
             "repaired_text": "",
             "rectified_audio": None,
+            "voice_error": None,
             "latency": {"asr_ms": 0.0, "repair_ms": 0.0, "synthesis_ms": 0.0, "total_ms": round((time.time() - start_total) * 1000.0, 1)},
             "telemetry": None,
         }
@@ -395,19 +396,26 @@ async def rectify_speech(
 
     # 2. Intent & Dysfluency Repair
     repair_eng = await asyncio.to_thread(get_repair_engine, authorization.partition(' ')[2], user.id)
-    repair_res = repair_eng.repair(raw_transcript, asr_res.get("words"))
+    repair_res = await asyncio.to_thread(repair_eng.repair, raw_transcript, asr_res.get("words"))   # snapping calls espeak: seconds on a cold cache
     repaired_text = repair_res.get("repaired_text", raw_transcript)
     repair_latency = repair_res.get("latency_ms", 1.0)
 
     # 3. Neural Voice Synthesis
     synth_latency = 0.0
     audio_output_b64 = None
+    voice_error = None
 
     if repaired_text:
-        voice = await asyncio.to_thread(get_voice, authorization.partition(' ')[2], user.id)
-        synth_res = await synthesize_neural_async(text=repaired_text, **voice)
-        synth_latency = synth_res.get("latency_ms", 0.0)
-        audio_output_b64 = audio_to_base64_wav(synth_res["audio"], 16000)
+        try:
+            voice = await asyncio.to_thread(get_voice, authorization.partition(' ')[2], user.id)
+        except HTTPException as e:
+            if e.status_code != 422:
+                raise
+            voice_error = e.detail   # broken saved voice: the text still goes back, spoken in no other voice
+        else:
+            synth_res = await synthesize_neural_async(text=repaired_text, **voice)
+            synth_latency = synth_res.get("latency_ms", 0.0)
+            audio_output_b64 = audio_to_base64_wav(synth_res["audio"], 16000)
     # nothing understood: say so (no audio), never hand the patient's own recording back as "rectified"
 
     # 4. Fast Clinical Telemetry
@@ -425,6 +433,7 @@ async def rectify_speech(
         "raw_transcript": raw_transcript,
         "repaired_text": repaired_text,
         "rectified_audio": audio_output_b64,
+        "voice_error": voice_error,
         "latency": {
             "asr_ms": round(asr_latency, 1),
             "repair_ms": round(repair_latency, 1),
@@ -462,9 +471,8 @@ async def extract_clinical_biomarkers(file: UploadFile = File(...)):
     return {"success": True, "biomarkers": results}
 
 
-def voice_settings(profile: VoiceProfile) -> Dict[str, Any]:
-    """synthesize_neural_async arguments for a validated profile."""
-    p = get_restoration_engine().create_sculpted_profile(**profile.model_dump(include=set(VoiceProfile.model_fields)))
+def voice_settings(p: Dict[str, Any]) -> Dict[str, Any]:
+    """synthesize_neural_async arguments for a sculpted profile (VoiceRestorationEngine.create_sculpted_profile)."""
     return {"voice": p["voice_id"], "pitch": p["pitch"], "rate": p["rate"], "volume": p["volume"],
             "warmth": p["warmth_pct"], "roughness": p["roughness_pct"]}
 
@@ -476,9 +484,10 @@ def get_voice(token, user_id) -> Dict[str, Any]:
     except Exception as e:
         raise fail(503, "Voice profile unavailable.", e)
     try:
-        return voice_settings(VoiceProfile(**((rows[0].get("voice_profile") if rows else None) or {})))
+        profile = VoiceProfile(**((rows[0].get("voice_profile") if rows else None) or {}))
     except (ValidationError, TypeError) as e:   # TypeError: not even an object (written around the API)
         raise fail(422, "The saved voice profile is invalid; please save it again.", e)
+    return voice_settings(get_restoration_engine().create_sculpted_profile(**profile.model_dump()))
 
 
 @app.put("/api/voice/profile")
@@ -501,7 +510,7 @@ async def sculpt_voice_timbre(request: VoiceSculptRequest):
         raise HTTPException(status_code=500, detail="Voice restoration engine unavailable.")
 
     profile = restoration_eng.create_sculpted_profile(**request.model_dump(include=set(VoiceProfile.model_fields)))
-    synth_res = await synthesize_neural_async(text=request.sample_phrase, **voice_settings(request))
+    synth_res = await synthesize_neural_async(text=request.sample_phrase, **voice_settings(profile))
 
     audio_b64 = audio_to_base64_wav(synth_res["audio"], 16000)
 
@@ -643,7 +652,10 @@ def save_utterance(session_id: UUID, req: UtteranceIn, authorization: str = Head
     }).execute()
     # shortcut: read-modify-write, so two simultaneous saves can lose one lesson; use an RPC if that matters
     # server key: patients cannot write what the server learns (migration 20261031); patient_id was checked by own_session
-    service_client().table("patient_profiles").update({"phonetic_corrections": engine.table, "vocabulary": vocab.counts}).eq("id", patient_id).execute()
+    try:
+        service_client().table("patient_profiles").update({"phonetic_corrections": engine.table, "vocabulary": vocab.counts}).eq("id", patient_id).execute()
+    except Exception as e:
+        raise fail(503, "Your sentence was saved, but learning from it failed.", e)
     return {"confirmed": confirmed, "reward": round(reward, 3)}
 
 
@@ -905,18 +917,20 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                 raw_text = asr_res.get("text", "")
 
                 repair = await asyncio.to_thread(get_repair_engine, auth_msg['token'], user.id)
-                repaired = repair.repair(raw_text, asr_res.get("words")).get("repaired_text", raw_text)
+                repaired = (await asyncio.to_thread(repair.repair, raw_text, asr_res.get("words"))).get("repaired_text", raw_text)
 
+                audio_b64, voice_error = None, None  # nothing understood: no audio, never the patient's own recording as "rectified"
                 if repaired:
                     try:
                         voice = await asyncio.to_thread(get_voice, auth_msg['token'], user.id)
                     except HTTPException as e:
-                        await websocket.send_json({"type": "error", "detail": e.detail})
-                        continue
-                    synth = await synthesize_neural_async(repaired, **voice)
-                    audio_b64 = audio_to_base64_wav(synth["audio"], 16000)
-                else:
-                    audio_b64 = None  # nothing understood: no audio, never the patient's own recording as "rectified"
+                        if e.status_code != 422:
+                            await websocket.send_json({"type": "error", "detail": e.detail})
+                            continue
+                        voice_error = e.detail   # broken saved voice: the text still goes out, spoken in no other voice
+                    else:
+                        synth = await synthesize_neural_async(repaired, **voice)
+                        audio_b64 = audio_to_base64_wav(synth["audio"], 16000)
 
                 latency_ms = (time.time() - start_rectify) * 1000.0
 
@@ -925,6 +939,7 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                     "raw_text": raw_text,
                     "repaired_text": repaired,
                     "audio_base64": audio_b64,
+                    "voice_error": voice_error,
                     "latency_ms": round(latency_ms, 1),
                 })
 

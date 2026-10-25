@@ -62,6 +62,7 @@ def summarize(rows):
         errs_raw, lens = corpus_errors([(r["ref"], r["raw"]) for r in subset])
         errs_rep, _ = corpus_errors([(r["ref"], r["repaired"]) for r in subset])
         return {"name": name, "severity": severity, "n": len(subset), "words": int(lens.sum()),
+                "gated": sum(1 for r in subset if r.get("gated")),
                 "raw": wer_ci(errs_raw, lens), "repaired": wer_ci(errs_rep, lens), "gain": wer_diff_ci(errs_raw, errs_rep, lens)}
 
     speakers = sorted({r["speaker"] for r in rows})

@@ -16,7 +16,7 @@ No build system is configured. Windows / PowerShell environment. Tests: `python 
 - Pipeline benchmark (synthetic dysarthria at mild/moderate/severe → repair → biomarkers): `python run_benchmark.py` (writes `benchmark_results.json`)
 - Fetch the TORGO mini-dataset (streams from U. Toronto archives): `python scripts/fetch_mini_torgo.py`
 - Full TORGO (verified download, selective extraction, audit): `python scripts/fetch_torgo_full.py download | list | extract` (default `--dest D:\DysTTS_TORGO_dataset`; writes `TORGO/manifest.csv` and `TORGO/audit.json`)
-- Real-speech evaluation (corpus WER with bootstrap CIs, per speaker): `python scripts/eval_torgo.py [data dir]`
+- Real-speech evaluation (speech gate + recogniser + repair, corpus WER with bootstrap CIs, per speaker; resumable via `outputs/eval_torgo_rows.jsonl`): `python scripts/eval_torgo.py [data dir] [--mic wav_headMic] [--limit N]` (a dir with `manifest.csv` is the full TORGO)
 - Modules with a `main()` smoke test: `src/data_ingestion.py`, `src/biomarker_engine.py`, `src/synthetic_dysarthria.py` — run directly, e.g. `python src/data_ingestion.py` (expects `data/TORGO` relative to cwd)
 
 Config via `.env` (loaded with python-dotenv, gitignored): `SUPABASE_URL`, `SUPABASE_KEY` (the **anon** key), `SUPABASE_SERVICE_ROLE_KEY` (server only; biomarkers, sessions, deletion and the rate limiter need it), optional `CORS_ALLOWED_ORIGINS`, `PIPER_VOICES_DIR`, `SUPABASE_TEST_PASSWORD`.

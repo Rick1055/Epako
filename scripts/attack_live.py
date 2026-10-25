@@ -107,8 +107,10 @@ def main():
         # the blocks above must not be "everything is broken": the owner still gets their own data
         own = a.table("therapy_sessions").select("id").execute().data
         saved = a.table("patient_profiles").update({"voice_profile": {"template": "male_gentle"}}).eq("id", pid[ua]).execute().data
-        print(f"sanity: patient A sees own sessions={len(own) == 1}, saves own voice={bool(saved)}")
-        results.append(len(own) == 1 and bool(saved))
+        a.table("patient_profiles").update({"consent_audio_storage": True}).eq("id", pid[ua]).execute()
+        uploaded = attempt(lambda: audio.upload(f"{ua}/consented.wav", b"RIFF", {"content-type": "audio/wav"}))[0]
+        print(f"sanity: patient A sees own sessions={len(own) == 1}, saves own voice={bool(saved)}, uploads after consenting={uploaded}")
+        results.append(len(own) == 1 and bool(saved) and uploaded)
         if has_vocab:   # last: if it gets through it erases A's rows
             check("patient A deletes their profile row, leaving audio behind (migration 20261031)", *refused(lambda: a.table("patient_profiles").delete().eq("id", pid[ua]).execute().data))
     finally:

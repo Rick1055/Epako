@@ -87,12 +87,21 @@ def warm_models():
 
 
 def get_repair_engine(token, user_id):
-    """Repair engine seeded with this patient's learned corrections (read under their own JWT)."""
+    """Repair engine seeded with this patient's learned corrections (read under their own JWT), plus their vocabulary
+    for snapping only while their recent confirmed texts show they are repeating words (on new words it does harm)."""
     try:
         from feedback_engine import FeedbackEngine
         from intent_repair import IntentRepair
-        rows = user_client(token).table("patient_profiles").select("phonetic_corrections").eq("user_id", user_id).execute().data
-        return IntentRepair(feedback_engine=FeedbackEngine((rows[0]["phonetic_corrections"] if rows else None) or {}))
+        from vocabulary import REPEAT_WINDOW, Vocabulary
+        client = user_client(token)
+        rows = client.table("patient_profiles").select("id, phonetic_corrections, vocabulary").eq("user_id", user_id).execute().data
+        row = rows[0] if rows else {}
+        vocab, recent = Vocabulary(row.get("vocabulary") or {}), []
+        if row:
+            said = client.table("session_utterances").select("corrected_text").eq("patient_id", row["id"]) \
+                .order("created_at", desc=True).limit(REPEAT_WINDOW).execute().data
+            recent = [u["corrected_text"] or "" for u in reversed(said)]
+        return IntentRepair(FeedbackEngine(row.get("phonetic_corrections") or {}), vocab if vocab.repeating(recent) else None)
     except Exception as e:
         raise fail(503, "Repair engine unavailable.", e)
 
@@ -365,7 +374,7 @@ async def rectify_speech(
 
     # 2. Intent & Dysfluency Repair
     repair_eng = await asyncio.to_thread(get_repair_engine, authorization.partition(' ')[2], user.id)
-    repair_res = repair_eng.repair(raw_transcript)
+    repair_res = repair_eng.repair(raw_transcript, asr_res.get("words"))
     repaired_text = repair_res.get("repaired_text", raw_transcript)
     repair_latency = repair_res.get("latency_ms", 1.0)
 
@@ -588,21 +597,23 @@ def start_session(authorization: str = Header(...), user=Depends(require_user)):
 
 @app.post("/api/sessions/{session_id}/utterances")
 def save_utterance(session_id: UUID, req: UtteranceIn, authorization: str = Header(...), user=Depends(rate_limit("utterance", 120))):
-    """The patient's yes/no (final_text == shown_text means yes) is stored and teaches their correction table."""
+    """The patient's yes/no (final_text == shown_text means yes) is stored and teaches their correction table and vocabulary."""
     from feedback_engine import FeedbackEngine, words
+    from vocabulary import Vocabulary
     client = user_client(authorization.partition(" ")[2])
     patient_id = own_session(client, user.id, str(session_id))
     confirmed = words(req.shown_text) == words(req.final_text)
-    table = client.table("patient_profiles").select("phonetic_corrections").eq("id", patient_id).execute().data[0]["phonetic_corrections"] or {}
-    engine = FeedbackEngine(table)
+    profile = client.table("patient_profiles").select("phonetic_corrections, vocabulary").eq("id", patient_id).execute().data[0]
+    engine, vocab = FeedbackEngine(profile["phonetic_corrections"] or {}), Vocabulary(profile.get("vocabulary") or {})
     reward = engine.learn(req.raw_transcript, req.shown_text, req.final_text)
+    vocab.add(req.final_text)
     service_client().table("session_utterances").insert({
         "session_id": str(session_id), "patient_id": patient_id,
         "transcribed_text": req.raw_transcript, "corrected_text": req.final_text,
         "confirmed": confirmed, "latency_ms": req.latency_ms,
     }).execute()
     # shortcut: read-modify-write, so two simultaneous saves can lose one lesson; use an RPC if that matters
-    client.table("patient_profiles").update({"phonetic_corrections": engine.table}).eq("id", patient_id).execute()
+    client.table("patient_profiles").update({"phonetic_corrections": engine.table, "vocabulary": vocab.counts}).eq("id", patient_id).execute()
     return {"confirmed": confirmed, "reward": round(reward, 3)}
 
 
@@ -854,7 +865,7 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                 raw_text = asr_res.get("text", "")
 
                 repair = await asyncio.to_thread(get_repair_engine, auth_msg['token'], user.id)
-                repaired = repair.repair(raw_text).get("repaired_text", raw_text)
+                repaired = repair.repair(raw_text, asr_res.get("words")).get("repaired_text", raw_text)
 
                 if repaired:
                     synth = await synthesize_neural_async(repaired)

@@ -12,6 +12,7 @@ DEFAULT_VOICE = "en_US-ryan-medium"
 
 _voices = {}
 _lock = threading.Lock()
+ESPEAK_LOCK = threading.Lock()  # espeak-ng keeps global state: one phonemizer call at a time (Piper's and vocabulary.py's)
 
 
 def _load(name):
@@ -37,7 +38,9 @@ def synthesize(text, voice=DEFAULT_VOICE, pitch="+0Hz", rate="+0%", volume="+0%"
     start = time.time()
     v = _load(voice)
     length_scale = 1.0 / (1.0 + np.clip(_percent(rate), -50, 100) / 100.0)
-    chunks = list(v.synthesize(text, syn_config=SynthesisConfig(length_scale=length_scale)))
+    # shortcut: Piper phonemizes inside its synthesis generator, so the whole synthesis is serialised; split it if voices must run in parallel
+    with ESPEAK_LOCK:
+        chunks = list(v.synthesize(text, syn_config=SynthesisConfig(length_scale=length_scale)))
     sr = v.config.sample_rate
     audio = np.concatenate([c.audio_float_array for c in chunks]) if chunks else np.zeros(0, dtype=np.float32)
 

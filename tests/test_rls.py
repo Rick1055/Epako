@@ -111,6 +111,14 @@ def test_patient_isolation(db):
     assert db.q("authenticated", PA, "update patient_profiles set voice_profile='{}' where id=%s", (db.pid[PB],)) == 0
 
 
+def test_vocabulary_starts_empty_and_only_its_patient_can_change_it(db):
+    assert db.q("authenticated", PA, "select vocabulary from patient_profiles") == [({},)]
+    assert db.q("authenticated", PA, """update patient_profiles set vocabulary='{"water": 3}' where id=%s""", (db.pid[PA],)) == 1
+    assert db.q("authenticated", PA, """update patient_profiles set vocabulary='{"x": 1}' where id=%s""", (db.pid[PB],)) == 0
+    assert db.q(None, None, "select vocabulary from patient_profiles where id=%s", (db.pid[PB],)) == [({},)]
+    denied(db, "authenticated", PA, "update patient_profiles set vocabulary = null where id=%s", (db.pid[PA],), "null value")
+
+
 def test_biomarkers_are_server_write_only(db):
     ins = "insert into biomarker_logs(session_id, patient_id, stability_index) values (%s, %s, 99)"
     denied(db, "authenticated", PA, ins, (db.sess[PA], db.pid[PA]), "permission denied")

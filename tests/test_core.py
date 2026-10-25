@@ -163,6 +163,17 @@ def test_repair_uses_learned_table():
     assert IntentRepair(FeedbackEngine(table)).repair("wun wun cat")["repaired_text"] == "One cat."
 
 
+def test_repair_snaps_to_the_patients_words_after_repeats_and_learned_swaps():
+    from feedback_engine import FeedbackEngine
+    from vocabulary import Vocabulary
+    heard = [{"word": "sip", "confidence": 0.3}, {"word": "sip", "confidence": 0.4}]
+    assert IntentRepair(vocabulary=Vocabulary({"ship": 2})).repair("sip sip", heard)["repaired_text"] == "Ship."
+    assert IntentRepair(vocabulary=Vocabulary({"ship": 2})).repair("sip sip")["repaired_text"] == "Sip."   # no confidence, no snap
+    # a swap learned from this exact mistake wins over a sound-alike guess
+    swaps = FeedbackEngine({"sip": {"to": "zip", "ok": 2, "bad": 0}})
+    assert IntentRepair(swaps, Vocabulary({"ship": 9, "zip": 1})).repair("sip", heard[:1])["repaired_text"] == "Zip."
+
+
 def test_api_has_no_duplicate_routes_or_functions():
     import ast, collections
     tree = ast.parse((ROOT / "src/api.py").read_text(encoding="utf-8"))
@@ -421,7 +432,7 @@ class _FakeQuery:
 
 def _session_world():
     tables = {
-        "patient_profiles": [{"id": "p1", "user_id": USER, "phonetic_corrections": {}}],
+        "patient_profiles": [{"id": "p1", "user_id": USER, "phonetic_corrections": {}, "vocabulary": {}}],
         "therapy_sessions": [{"id": MINE, "patient_id": "p1", "created_at": "2026-10-24T10:00:00+00:00"},
                              {"id": THEIRS, "patient_id": "p2", "created_at": "2026-10-24T10:00:00+00:00"}],
         "session_utterances": [],
@@ -451,6 +462,7 @@ def test_session_routes_write_scores_with_the_server_key_only():
     assert started.status_code == 200 and foreign.status_code == 404
     assert no.json() == {"confirmed": False, "reward": 0.5} and yes.json() == {"confirmed": True, "reward": 1.0}
     assert tables["patient_profiles"][0]["phonetic_corrections"]["wun"] == {"to": "one", "ok": 2, "bad": 0}
+    assert tables["patient_profiles"][0]["vocabulary"] == {"one": 3, "cat": 3}   # every answer adds the words meant
     assert done.json()["utterances_count"] == 3 and done.json()["accuracy_rate"] == pytest.approx(33.33, abs=0.01)
     assert set(user_db.writes) == {"patient_profiles"}                           # the patient's own client never writes scores
     assert set(server_db.writes) == {"therapy_sessions", "session_utterances"}   # only the server key does
@@ -552,3 +564,58 @@ def test_websocket_reports_no_speech_instead_of_transcribing_noise():
                 seen.append(ws.receive_json())
     assert seen[-1]["type"] == "no_speech"
     asr_loader.assert_not_called()
+
+
+def _heard(text, confidence):
+    return {"text": text, "words": [{"word": w, "confidence": confidence} for w in text.split()], "latency_ms": 1.0}
+
+
+def test_rectify_snaps_unsure_words_to_the_patients_words_only_while_they_are_repeating_words():
+    from fastapi.testclient import TestClient
+    import api
+    from vocabulary import REPEAT_WINDOW
+    tables, user_db, _ = _session_world()
+    tables["patient_profiles"][0]["vocabulary"] = {"ship": REPEAT_WINDOW}
+    asr = mock.Mock()
+    voice = mock.AsyncMock(return_value={"audio": np.zeros(1600, dtype="float32"), "latency_ms": 1.0})
+    _as(USER)
+
+    def say(c, heard):
+        asr.transcribe.return_value = heard
+        return c.post("/api/rectify", json={"audio_base64": _wav_b64()}, headers=AUTH).json()
+
+    try:
+        with mock.patch.object(api, "contains_speech", return_value=True), mock.patch.object(api, "get_asr_engine", return_value=asr), \
+                mock.patch.object(api, "user_client", return_value=user_db), mock.patch.object(api, "synthesize_neural_async", voice):
+            c = TestClient(api.app)
+            no_history = say(c, _heard("sip", 0.3))
+            tables["session_utterances"] += [{"patient_id": "p1", "corrected_text": "ship"}] * REPEAT_WINDOW
+            unsure, sure = say(c, _heard("sip", 0.3)), say(c, _heard("sip", 0.99))
+    finally:
+        api.app.dependency_overrides.clear()
+    assert no_history["repaired_text"] == "Sip."   # not repeating words yet: snapping stays off
+    assert unsure["raw_transcript"] == "sip" and unsure["repaired_text"] == "Ship."
+    assert sure["repaired_text"] == "Sip."         # the recogniser was sure: left alone
+    assert voice.await_args_list[1].kwargs["text"] == "Ship."   # the voice says the snapped word
+
+
+def test_websocket_snaps_unsure_words_too():
+    import json
+    from fastapi.testclient import TestClient
+    import api
+    from intent_repair import IntentRepair
+    from vocabulary import Vocabulary
+    asr = mock.Mock()
+    asr.transcribe.return_value = _heard("sip", 0.3)
+    voice = mock.AsyncMock(return_value={"audio": np.zeros(1600, dtype="float32"), "latency_ms": 1.0})
+    loud = (rng.standard_normal(1600) * 0.3 * 32767).astype("int16").tobytes()
+    quiet = np.zeros(1600, dtype="int16").tobytes()
+    with mock.patch.object(api, "verify_token", return_value=mock.Mock(id="ws-user-4")), mock.patch.object(api, "contains_speech", return_value=True),             mock.patch.object(api, "get_asr_engine", return_value=asr), mock.patch.object(api, "synthesize_neural_async", voice),             mock.patch.object(api, "get_repair_engine", return_value=IntentRepair(vocabulary=Vocabulary({"ship": 3}))):
+        with TestClient(api.app).websocket_connect("/ws/rectify") as ws:
+            ws.send_text(json.dumps({"type": "auth", "token": "t", "sample_rate": 16000, "encoding": "pcm_s16le"}))
+            for chunk in [loud] * 6 + [quiet] * 8:
+                ws.send_bytes(chunk)
+            seen = []
+            while not seen or seen[-1]["type"] == "telemetry":
+                seen.append(ws.receive_json())
+    assert seen[-1]["type"] == "rectified_output" and seen[-1]["repaired_text"] == "Ship."

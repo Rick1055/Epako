@@ -17,7 +17,7 @@ Never edit an applied migration; add a new one in `supabase/migrations/`.
 
 | Table | Key fields | Notes |
 |---|---|---|
-| `patient_profiles` | `id`, `user_id`, `voice_profile`, `phonetic_corrections`, `consent_audio_storage` | no name/email/condition; identity lives in `auth.users` only |
+| `patient_profiles` | `id`, `user_id`, `voice_profile`, `phonetic_corrections`, `vocabulary`, `consent_audio_storage` | no name/email/condition; identity lives in `auth.users` only |
 | `therapy_sessions` | `id`, `patient_id`, `duration_seconds`, `utterances_count`, `accuracy_rate` | written only by the API (service role); numbers set by `/finish` |
 | `session_utterances` | `session_id`, `patient_id`, `transcribed_text` (raw ASR), `corrected_text` (final), `confirmed`, `latency_ms` | written only by the API |
 | `biomarker_logs` | `session_id`, `patient_id`, `articulation_velocity`, `speaking_rate`, `pause_ratio`, `formant_compression_index`, `vocal_jitter_pct`, `vocal_shimmer_pct`, `mean_f0_hz`, `stability_index`, `metrics` | server-write-only; NULL means "not measured", never 0 |
@@ -35,6 +35,16 @@ RPCs: `create_link_code() -> text` (patient, 10 chars, valid 15 min, one live co
 
 `{ "<heard word>": { "to": "<intended word>", "ok": int, "bad": int } }` — applied only when `ok >= 2` and `ok/(ok+bad) >= 0.6`.
 Owner of the logic: `src/feedback_engine.py` (`FeedbackEngine.apply` / `.learn`). Nothing else writes this field.
+
+## Vocabulary (`patient_profiles.vocabulary`)
+
+`{ "<word>": count }` — every word of every `final_text` the patient sends (what they meant). In repair, a word the
+recogniser was unsure of (confidence below `UNSURE_BELOW`) is replaced by the closest-sounding vocabulary word
+(espeak phonemes, at most `SNAP_DISTANCE` apart; ties go to the more frequent word, true ties are left alone).
+Words the recogniser was sure of are never changed, and without confidences nothing is snapped. Snapping is on only
+while the patient is repeating words: at least `REPEAT_SHARE` of their last `REPEAT_WINDOW` confirmed texts
+(`session_utterances.corrected_text`) contain only words said twice or more. On new words it does harm.
+Owner of the logic: `src/vocabulary.py`; written only by `POST /api/sessions/{id}/utterances`.
 
 ## API (all need `Authorization: Bearer <supabase access token>`)
 

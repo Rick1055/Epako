@@ -3,8 +3,10 @@ import time
 
 try:
     from .feedback_engine import FeedbackEngine
+    from .vocabulary import unsure
 except ImportError:
     from feedback_engine import FeedbackEngine
+    from vocabulary import unsure
 
 
 class IntentRepair:
@@ -13,11 +15,13 @@ class IntentRepair:
     
     1. Eliminates involuntary neuromotor syllable repetitions (e.g., 'he he' -> 'he').
     2. Applies patient-specific learned phonetic corrections from FeedbackEngine.
-    3. Normalizes capitalization and punctuation.
+    3. Snaps words the recogniser was unsure of to the closest-sounding word the patient uses (Vocabulary).
+    4. Normalizes capitalization and punctuation.
     """
 
-    def __init__(self, feedback_engine=None):
+    def __init__(self, feedback_engine=None, vocabulary=None):
         self.feedback_engine = feedback_engine
+        self.vocabulary = vocabulary
 
     def clean_dysfluencies(self, text: str) -> str:
         """
@@ -28,9 +32,10 @@ class IntentRepair:
         cleaned = re.sub(r'\s+', ' ', cleaned).strip()
         return cleaned
 
-    def repair(self, text: str):
+    def repair(self, text: str, recognised=None):
         """
         Applies multi-tier dysfluency cleaning and patient memory repair.
+        recognised: the recogniser's [{"word", "confidence"}]; without it nothing is snapped.
         """
         start_time = time.time()
         original_text = text
@@ -42,7 +47,11 @@ class IntentRepair:
         if self.feedback_engine:
             text = self.feedback_engine.apply(text)
 
-        # Tier 3: Capitalize first letter and ensure ending punctuation
+        # Tier 3: Snap to words the patient actually uses (after Tier 2: a swap learned from this exact mistake is surer)
+        if self.vocabulary:
+            text = self.vocabulary.snap(text, unsure(recognised))
+
+        # Tier 4: Capitalize first letter and ensure ending punctuation
         if text:
             text = text[0].upper() + text[1:]
 

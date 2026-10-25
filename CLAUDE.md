@@ -17,6 +17,7 @@ No build system is configured. Windows / PowerShell environment. Tests: `python 
 - Fetch the TORGO mini-dataset (streams from U. Toronto archives): `python scripts/fetch_mini_torgo.py`
 - Full TORGO (verified download, selective extraction, audit): `python scripts/fetch_torgo_full.py download | list | extract` (default `--dest D:\DysTTS_TORGO_dataset`; writes `TORGO/manifest.csv` and `TORGO/audit.json`)
 - Real-speech evaluation (speech gate + recogniser + repair, corpus WER with bootstrap CIs, per speaker; resumable via `outputs/eval_torgo_rows.jsonl`): `python scripts/eval_torgo.py [data dir] [--mic wav_headMic] [--limit N]` (a dir with `manifest.csv` is the full TORGO)
+- Learning simulation on cached TORGO output (feedback engine; `--vocabulary` adds snapping): `python scripts/simulate_learning.py [--min-repeats 3] [--vocabulary]`
 - Modules with a `main()` smoke test: `src/data_ingestion.py`, `src/biomarker_engine.py`, `src/synthetic_dysarthria.py` — run directly, e.g. `python src/data_ingestion.py` (expects `data/TORGO` relative to cwd)
 
 Config via `.env` (loaded with python-dotenv, gitignored): `SUPABASE_URL`, `SUPABASE_KEY` (the **anon** key), `SUPABASE_SERVICE_ROLE_KEY` (server only; biomarkers, sessions, deletion and the rate limiter need it), optional `CORS_ALLOWED_ORIGINS`, `PIPER_VOICES_DIR`, `SUPABASE_TEST_PASSWORD`.
@@ -26,8 +27,8 @@ Config via `.env` (loaded with python-dotenv, gitignored): `SUPABASE_URL`, `SUPA
 Pipeline (see `/api/rectify` and `/ws/rectify` in `src/api.py`):
 
 0. `speech_gate.contains_speech` — Silero VAD (ONNX model bundled in the `silero-vad` package, run with onnxruntime; install with `--no-deps` to keep your torch). Silence/noise returns "nothing heard" before the recogniser runs, because it hallucinates voice-assistant sentences from noise.
-1. `speech_recognizer.DysarthriaSpeechRecognizer` — HF `pipeline` ASR using Parakeet-TDT (`dys-asr/parakeet-tdt-0.6b-unconstrained-soup`), FP16 on CUDA.
-2. `intent_repair.IntentRepair` — regex dysfluency/repetition removal + patient-specific corrections learned by `feedback_engine.FeedbackEngine` (word-level yes/no learning, see `docs/contract.md`).
+1. `speech_recognizer.DysarthriaSpeechRecognizer` — HF `pipeline` ASR using Parakeet-TDT (`dys-asr/parakeet-tdt-0.6b-unconstrained-soup`), FP16 on CUDA. `transcribe()` also returns per-word confidence (`words`), read through a hook on a transformers internal; it is `None` if the hook stops matching the text.
+2. `intent_repair.IntentRepair` — regex dysfluency/repetition removal + patient-specific corrections learned by `feedback_engine.FeedbackEngine` (word-level yes/no learning) + `vocabulary.Vocabulary`: words the recogniser was unsure of snap to the closest-sounding word the patient has used (see `docs/contract.md`).
 3. `voice_restoration.VoiceRestorationEngine` — maps voice templates / sculpted params (pitch, rate, warmth) to on-device Piper voices (`voice_palette`, `src/local_tts.py`; nothing is sent to a cloud TTS) and builds profiles from pre-morbid voice notes. Synthesis itself is done in `api.synthesize_neural_async`; the server warms all voices in a background thread at startup (~90 s).
 4. `biomarker_engine` — articulation velocity, jitter/shimmer (phonatory instability), formant centralization ratio, WavLM attention entropy.
 

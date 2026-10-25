@@ -11,10 +11,11 @@ Extracts real paired (wav_headMic/*.wav + prompts/*.txt) utterances for 10 speak
 
 import os
 import re
+import sys
 import tarfile
 import urllib.request
 
-BASE_URL = "http://www.cs.toronto.edu/~complingweb/data/TORGO/"
+BASE_URL = "https://www.cs.toronto.edu/~complingweb/data/TORGO/"
 
 SPEAKER_CLINICAL_INFO = {
     "F01": {"gender": "Female", "diagnosis": "Cerebral Palsy", "severity": "Moderate"},
@@ -129,6 +130,7 @@ def extract_paired_torgo(target_dir, max_utterances_per_speaker=8):
 
 
 if __name__ == "__main__":
-    out_dir = os.path.join(os.getcwd(), "data", "TORGO")
-    extract_paired_torgo(out_dir, max_utterances_per_speaker=8)
+    # usage: python scripts/fetch_mini_torgo.py [destination folder] [utterances per speaker]
+    out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.getcwd(), "data", "TORGO")
+    extract_paired_torgo(out_dir, max_utterances_per_speaker=int(sys.argv[2]) if len(sys.argv) > 2 else 8)
 

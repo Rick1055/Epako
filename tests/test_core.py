@@ -40,6 +40,9 @@ def fake_limiter():
         yield
 
 
+rng = np.random.default_rng(0)
+
+
 def repaired(text):
     return IntentRepair().repair(text)["repaired_text"]
 
@@ -490,3 +493,62 @@ def test_websocket_rechecks_the_token_after_five_minutes():
             with pytest.raises(WebSocketDisconnect) as e:
                 ws.receive_text()
     assert e.value.code == 1008 and verify.call_count == 2
+
+
+def _wav_b64(seconds=1.0):
+    import base64, io
+    import soundfile as sf
+    buf = io.BytesIO()
+    sf.write(buf, (0.2 * np.sin(2 * np.pi * 200 * np.arange(int(16000 * seconds)) / 16000)).astype("float32"), 16000, format="WAV")
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def test_rectify_says_nothing_heard_and_runs_no_recogniser_when_there_is_no_speech():
+    from fastapi.testclient import TestClient
+    import api
+    asr = mock.Mock()
+    _as("77777777-7777-7777-7777-777777777777")
+    try:
+        with mock.patch.object(api, "contains_speech", return_value=False), mock.patch.object(api, "get_asr_engine", return_value=asr),              mock.patch.object(api, "synthesize_neural_async", side_effect=AssertionError("must not speak")):
+            r = TestClient(api.app).post("/api/rectify", json={"audio_base64": _wav_b64()}, headers=AUTH)
+    finally:
+        api.app.dependency_overrides.clear()
+    assert r.status_code == 200
+    assert r.json()["speech_detected"] is False and r.json()["raw_transcript"] == "" and r.json()["repaired_text"] == ""
+    assert r.json()["rectified_audio"] is None
+    asr.transcribe.assert_not_called()
+
+
+def test_rectify_never_plays_the_input_back_as_rectified_when_nothing_was_understood():
+    from fastapi.testclient import TestClient
+    import api
+    from intent_repair import IntentRepair
+    asr = mock.Mock()
+    asr.transcribe.return_value = {"text": "", "latency_ms": 1.0}
+    _as("88888888-8888-8888-8888-888888888888")
+    try:
+        with mock.patch.object(api, "contains_speech", return_value=True), mock.patch.object(api, "get_asr_engine", return_value=asr),              mock.patch.object(api, "get_repair_engine", return_value=IntentRepair()):
+            r = TestClient(api.app).post("/api/rectify", json={"audio_base64": _wav_b64()}, headers=AUTH)
+    finally:
+        api.app.dependency_overrides.clear()
+    assert r.status_code == 200 and r.json()["speech_detected"] is True
+    assert r.json()["repaired_text"] == "" and r.json()["rectified_audio"] is None   # not the patient's own raw audio
+
+
+def test_websocket_reports_no_speech_instead_of_transcribing_noise():
+    import json
+    from fastapi.testclient import TestClient
+    import api
+    asr_loader = mock.Mock(side_effect=AssertionError("recogniser must not run"))
+    loud = (rng.standard_normal(1600) * 0.3 * 32767).astype("int16").tobytes()
+    quiet = np.zeros(1600, dtype="int16").tobytes()
+    with mock.patch.object(api, "verify_token", return_value=mock.Mock(id="ws-user-3")), mock.patch.object(api, "contains_speech", return_value=False),          mock.patch.object(api, "get_asr_engine", asr_loader):
+        with TestClient(api.app).websocket_connect("/ws/rectify") as ws:
+            ws.send_text(json.dumps({"type": "auth", "token": "t", "sample_rate": 16000, "encoding": "pcm_s16le"}))
+            for chunk in [loud] * 6 + [quiet] * 8:
+                ws.send_bytes(chunk)
+            seen = []
+            while not seen or seen[-1]["type"] == "telemetry":
+                seen.append(ws.receive_json())
+    assert seen[-1]["type"] == "no_speech"
+    asr_loader.assert_not_called()

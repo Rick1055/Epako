@@ -29,6 +29,7 @@ import numpy as np
 import librosa
 import soundfile as sf
 import local_tts
+from speech_gate import contains_speech
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Request, Response, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -344,6 +345,18 @@ async def rectify_speech(
     if len(audio) < 1600:
         raise HTTPException(status_code=400, detail="Audio sample too short (<100ms).")
 
+    # 0. Silence and noise must never become a sentence: the recogniser invents one if asked
+    if not await asyncio.to_thread(contains_speech, audio):
+        return {
+            "success": True,
+            "speech_detected": False,
+            "raw_transcript": "",
+            "repaired_text": "",
+            "rectified_audio": None,
+            "latency": {"asr_ms": 0.0, "repair_ms": 0.0, "synthesis_ms": 0.0, "total_ms": round((time.time() - start_total) * 1000.0, 1)},
+            "telemetry": None,
+        }
+
     # 1. Transcribe using Dysarthria ASR
     asr = await asyncio.to_thread(get_asr_engine)
     asr_res = await asyncio.to_thread(asr.transcribe, audio, sample_rate=16000)
@@ -376,8 +389,7 @@ async def rectify_speech(
         )
         synth_latency = synth_res.get("latency_ms", 0.0)
         audio_output_b64 = audio_to_base64_wav(synth_res["audio"], 16000)
-    else:
-        audio_output_b64 = audio_to_base64_wav(audio, 16000)
+    # nothing understood: say so (no audio), never hand the patient's own recording back as "rectified"
 
     # 4. Fast Clinical Telemetry
     try:
@@ -390,6 +402,7 @@ async def rectify_speech(
 
     return {
         "success": True,
+        "speech_detected": True,
         "raw_transcript": raw_transcript,
         "repaired_text": repaired_text,
         "rectified_audio": audio_output_b64,
@@ -832,6 +845,10 @@ async def websocket_speech_rectifier(websocket: WebSocket):
 
                 start_rectify = time.time()
 
+                if not await asyncio.to_thread(contains_speech, utterance_audio):
+                    await websocket.send_json({"type": "no_speech"})
+                    continue
+
                 asr = await asyncio.to_thread(get_asr_engine)
                 asr_res = await asyncio.to_thread(asr.transcribe, utterance_audio, sample_rate=16000)
                 raw_text = asr_res.get("text", "")
@@ -843,7 +860,7 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                     synth = await synthesize_neural_async(repaired)
                     audio_b64 = audio_to_base64_wav(synth["audio"], 16000)
                 else:
-                    audio_b64 = audio_to_base64_wav(utterance_audio, 16000)
+                    audio_b64 = None  # nothing understood: no audio, never the patient's own recording as "rectified"
 
                 latency_ms = (time.time() - start_rectify) * 1000.0
 

@@ -187,3 +187,4 @@ websockets==15.0.1
 widgetsnbextension==4.0.15
 onnxruntime==1.31.0
 piper-tts==1.8.0
+silero-vad==6.2.3

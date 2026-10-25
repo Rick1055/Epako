@@ -46,7 +46,7 @@ Owner of the logic: `src/feedback_engine.py` (`FeedbackEngine.apply` / `.learn`)
 | `POST /api/session/analyze` | form: `session_id`, `file` (audio) | `{success, biomarkers}`; needs `SUPABASE_SERVICE_ROLE_KEY` |
 | `POST /api/session/report/pdf` | `{session_id, inline?}` | PDF; 422 if no assessment or unmeasured values |
 | `DELETE /api/me/data` | `{confirm: "DELETE", password?}` (email accounts must send the password; passwordless accounts need a sign-in within 5 minutes) | `{success}`; audio first, then account; 3 per hour |
-| `POST /api/rectify` | audio (multipart or base64 JSON) | `{raw_transcript, repaired_text, rectified_audio, latency, telemetry}` |
+| `POST /api/rectify` | audio (multipart or base64 JSON) | `{speech_detected, raw_transcript, repaired_text, rectified_audio, latency, telemetry}`. If no speech is detected (silence, noise) or nothing was understood, the text is `""` and `rectified_audio` is `null`: the patient's own recording is never returned as "rectified". `WS /ws/rectify` sends `{"type": "no_speech"}` instead of `rectified_output` |
 | `POST /api/biomarkers`, `/api/voice/sculpt`, `/api/voice/bank`, `GET /health`, `WS /ws/rectify` | see `src/api.py` | |
 
 ## Rules that tests must keep true
@@ -54,7 +54,7 @@ Owner of the logic: `src/feedback_engine.py` (`FeedbackEngine.apply` / `.learn`)
 1. No route is defined twice (`tests/test_core.py::test_api_has_no_duplicate_routes_or_functions`).
 2. A client request body never supplies clinical facts (biomarkers, clinician, assessment text).
 3. "Not measured" is `None`/NULL, not 0.
-4. Failures return an error; no silent fallback to made-up output.
+4. Failures return an error; no silent fallback to made-up output. Silence and noise are never transcribed (`speech_gate`, Silero VAD at P >= 0.20): the recogniser invents sentences from them.
 5. Secrets (`.env`, service-role key) are never committed or sent to a client.
 6. The API is not the security boundary: clients hold the public anon key and can call Supabase directly, so every rule above must be enforced by row-level security and is attacked in `tests/test_rls.py` (e.g. an utterance must belong to a session of the same patient).
 7. Abuse limits: every authenticated route is rate-limited per user (`api.hit` / `rate_limit`, state in Postgres so it is shared by all workers and survives restarts), audio is capped at 60 s, WebSocket chunks at 256 KB, WebSocket tokens are re-verified every 5 minutes, and error responses are generic (the real error is logged server-side). `/health` returns only `{"status": "online"}`.

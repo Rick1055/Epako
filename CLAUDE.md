@@ -25,6 +25,7 @@ Config via `.env` (loaded with python-dotenv, gitignored): `SUPABASE_URL`, `SUPA
 
 Pipeline (see `/api/rectify` and `/ws/rectify` in `src/api.py`):
 
+0. `speech_gate.contains_speech` — Silero VAD (ONNX model bundled in the `silero-vad` package, run with onnxruntime; install with `--no-deps` to keep your torch). Silence/noise returns "nothing heard" before the recogniser runs, because it hallucinates voice-assistant sentences from noise.
 1. `speech_recognizer.DysarthriaSpeechRecognizer` — HF `pipeline` ASR using Parakeet-TDT (`dys-asr/parakeet-tdt-0.6b-unconstrained-soup`), FP16 on CUDA.
 2. `intent_repair.IntentRepair` — regex dysfluency/repetition removal + patient-specific corrections learned by `feedback_engine.FeedbackEngine` (word-level yes/no learning, see `docs/contract.md`).
 3. `voice_restoration.VoiceRestorationEngine` — maps voice templates / sculpted params (pitch, rate, warmth) to on-device Piper voices (`voice_palette`, `src/local_tts.py`; nothing is sent to a cloud TTS) and builds profiles from pre-morbid voice notes. Synthesis itself is done in `api.synthesize_neural_async`; the server warms all voices in a background thread at startup (~90 s).

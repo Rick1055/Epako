@@ -15,6 +15,8 @@ No build system is configured. Windows / PowerShell environment. Tests: `python 
 - End-to-end check against a running server: `python test_api_e2e.py` (hits `/health` and `/api/rectify` on localhost:8000 with a synthetic tone)
 - Pipeline benchmark (synthetic dysarthria at mild/moderate/severe → repair → biomarkers): `python run_benchmark.py` (writes `benchmark_results.json`)
 - Fetch the TORGO mini-dataset (streams from U. Toronto archives): `python scripts/fetch_mini_torgo.py`
+- Full TORGO (verified download, selective extraction, audit): `python scripts/fetch_torgo_full.py download | list | extract` (default `--dest D:\DysTTS_TORGO_dataset`; writes `TORGO/manifest.csv` and `TORGO/audit.json`)
+- Real-speech evaluation (corpus WER with bootstrap CIs, per speaker): `python scripts/eval_torgo.py [data dir]`
 - Modules with a `main()` smoke test: `src/data_ingestion.py`, `src/biomarker_engine.py`, `src/synthetic_dysarthria.py` — run directly, e.g. `python src/data_ingestion.py` (expects `data/TORGO` relative to cwd)
 
 Config via `.env` (loaded with python-dotenv, gitignored): `SUPABASE_URL`, `SUPABASE_KEY` (the **anon** key), `SUPABASE_SERVICE_ROLE_KEY` (server only; biomarkers, sessions, deletion and the rate limiter need it), optional `CORS_ALLOWED_ORIGINS`, `PIPER_VOICES_DIR`, `SUPABASE_TEST_PASSWORD`.
@@ -35,6 +37,7 @@ Supporting modules: `synthetic_dysarthria` (DSP perturbation engine to simulate 
 - Clients never supply clinical facts: biomarkers are measured server-side (`/api/session/analyze`, service-role key) and reports are built from stored rows (`docs/contract.md` is the source of truth for tables and routes).
 - Imports inside `api.py` use bare module names (`from intent_repair import ...`) while `src/__init__.py` uses relative imports; `intent_repair` and `pdf_generator` try both.
 - Per-patient learning lives in `FeedbackEngine` (word table stored in `patient_profiles.phonetic_corrections`); migrations are append-only.
+- Auth requires a CAPTCHA (Cloudflare Turnstile, enabled in Supabase → Authentication → Attack Protection). Every client sign-up and sign-in must send a `captcha_token`; without one Supabase refuses with `captcha protection: request disallowed`. Verified live on 2026-10-25 for sign-in and sign-up with no token and with a fake token; password reset and OTP were not tested. The service-role admin API (`auth.admin.create_user`) is exempt, so server-side tests create users that way. `SupabaseManager.sign_in` / `sign_up` do not send a token yet, so `scripts/test_supabase_e2e.py` and any script that signs in with a password fail while CAPTCHA is on; switch it off to run them.
 
 Other top-level files: `epako_sylva_experience.html` is the (mock, not yet API-connected) frontend experience; `graphify-out/` is generated knowledge-graph output; `.agents/plugins/ponytail` is a git submodule. `data/` (TORGO audio) is gitignored.
 
@@ -64,5 +67,11 @@ Source: `forrestchang/andrej-karpathy-skills`. Install once with `/plugin market
 - Turn tasks into verifiable goals: "fix the bug" means a reproducing test first, then make it pass; "refactor X" means tests pass before and after.
 - For multi-step tasks, state a brief plan, one line per step: `1. [step] -> verify: [check]`.
 - Loop until the check passes. Report real output if it fails; no tests exist for a module means say so, don't claim it works.
+
+## Disk hygiene
+
+C: is nearly full, so scratch files must not pile up. Periodically (at the start of a long session, and after any task that generated outputs) look for unused files this project or its sessions produced: scratch scripts, temp audio/PNG/JSON output, screenshots, stale benchmark or log files, caches, and downloaded archives that nothing references and that haven't been touched in a long time. Never touch tracked files, `.env`, `data/`, `models/`, or anything you're unsure about; report those instead.
+
+Before deleting anything, prompt me and list each file. For every file give, in one or two lines: its path, what it does/what produced it, and what deleting it might affect. Delete only after I confirm. Report the space freed afterwards.
 
 Keep tool-call chatter minimal. Instructions cannot clear the terminal; the user presses Ctrl+L (do not suggest /clear, which wipes context).

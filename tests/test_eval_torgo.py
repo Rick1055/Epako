@@ -21,11 +21,13 @@ def test_only_real_prompts_on_the_chosen_mic_are_evaluated(tmp_path):
         ("F01", "Session1", "wav_headMic", "0003", "input/images/12.jpg", "3", "c.wav"),          # describe-a-picture: no fixed text
         ("F01", "Session1", "wav_headMic", "0004", "", "1", "d.wav"),                             # take without text
         ("F01", "Session1", "wav_headMic", "0005", "Please call Stella.", "2", "e.wav"),
+        ("F01", "Session1", "wav_headMic", "0007", 'read [as in "I can read"]', "1", "h.wav"),     # the note is for the speaker, not said
+        ("F01", "Session1", "wav_headMic", "0008", "rare lily...rare lie\x1b[D\x1b[D", "3", "i.wav"),  # typist's cursor keys left in the text
         ("F01", "Session1", "wav_arrayMic", "0005", "Please call Stella.", "2", "f.wav"),
         ("MC01", "Session1", "wav_headMic", "0006", "zip", "1", "g.wav"),
     ])
     got = manifest_samples(tmp_path, "wav_headMic")
-    assert [(s["speaker_id"], s["text"], s["is_dysarthric"]) for s in got] == [("F01", "Please call Stella.", True), ("MC01", "zip", False)]
+    assert [(s["speaker_id"], s["text"], s["is_dysarthric"]) for s in got] == [("F01", "Please call Stella.", True), ("F01", "read", True), ("MC01", "zip", False)]
     assert got[0]["wav_path"] == str(tmp_path / "e.wav")
 
 

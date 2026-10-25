@@ -12,6 +12,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -24,8 +25,8 @@ def manifest_samples(root, mic):
     """Utterances with real reference words on one mic (not instructions, 'xxx', picture prompts or empty takes)."""
     out = []
     for r in csv.DictReader(open(os.path.join(root, "manifest.csv"), encoding="utf-8")):
-        p = r["prompt"].strip()
-        if r["mic"] != mic or not p or p.startswith("[") or p.lower() == "xxx" or "input/images" in p:
+        p = re.sub(r"\[.*?\]", "", r["prompt"]).strip()   # "read [as in ...]": the note is for the speaker, not said
+        if r["mic"] != mic or not p or p.lower() == "xxx" or "input/images" in p or "\x1b" in p:
             continue
         out.append({"speaker_id": r["speaker"], "is_dysarthric": not r["speaker"].upper().startswith(("FC", "MC")),
                     "severity": "-", "text": p, "wav_path": os.path.join(root, r["wav"])})
@@ -57,7 +58,7 @@ def main(data_dir, mic, limit):
     with open(cache, "a", encoding="utf-8") as out:
         for i, s in enumerate(samples, 1):
             if s["wav_path"] in done:
-                rows.append(done[s["wav_path"]])
+                rows.append({**done[s["wav_path"]], "ref": s["text"]})   # recogniser output is cached; the reference is not
                 continue
             audio, sr = sf.read(s["wav_path"], dtype="float32")
             if audio.ndim > 1:

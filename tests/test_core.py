@@ -91,7 +91,14 @@ def test_failed_save_is_not_swallowed():
         mgr.upload_audio(b"x", "a.wav")
 
 
-def test_pdf_report_comes_from_stored_session():
+MEASURED_VOWELS = {"mean_f1": 520.0, "mean_f2": 1480.0, "f1_dispersion": 90.0, "f2_dispersion": 260.0,
+                   "vowel_space_area": 73513.0, "formant_compression_index": 0.136}   # as /api/session/analyze stores them
+
+
+@pytest.mark.parametrize("formants", [{"formant_compression_index": None, "metrics": {}},
+                                      {"formant_compression_index": 0.136, "metrics": {"vowel_space": MEASURED_VOWELS}}],
+                         ids=["no-vowel-space", "measured-vowel-space"])
+def test_pdf_report_comes_from_stored_session(formants):
     from fastapi.testclient import TestClient
     import api
     sid = "11111111-1111-1111-1111-111111111111"
@@ -101,7 +108,7 @@ def test_pdf_report_comes_from_stored_session():
             "clinicians": [{"display_name": "Dr Real"}],
             "biomarker_logs": [{"articulation_velocity": 3.0, "speaking_rate": 2.0, "pause_ratio": 0.3,
                                 "vocal_jitter_pct": 1.0, "vocal_shimmer_pct": 3.0, "mean_f0_hz": 140.0,
-                                "formant_compression_index": None, "stability_index": 90.0}],
+                                "stability_index": 90.0, **formants}],
             "session_utterances": [{"transcribed_text": "a a b", "corrected_text": "A b.", "latency_ms": 5}]}
     client = mock.MagicMock()
     client.table.side_effect = lambda t: mock.MagicMock(**{
@@ -121,6 +128,26 @@ def test_pdf_report_comes_from_stored_session():
     assert ok.status_code == 200 and ok.content.startswith(b"%PDF")
     assert b"Dr Fake" not in ok.content
     assert nope.status_code == 404
+
+
+def test_the_delete_screens_captcha_token_reaches_supabases_password_check():
+    # with CAPTCHA on, Supabase refuses a password sign-in without a token, so deletion could never pass (live 2026-10-26)
+    from fastapi.testclient import TestClient
+    import api
+    import supabase_manager
+    auth = mock.Mock()
+    auth.sign_in_with_password.return_value = mock.Mock(user=mock.Mock())
+    api.app.dependency_overrides[api.require_user] = lambda: mock.Mock(id="22222222-2222-2222-2222-222222222222", email="p@example.com",
+                                                                       app_metadata={"providers": ["email"]})
+    try:
+        with mock.patch.object(supabase_manager, "SupabaseManager", return_value=mock.Mock(client=mock.Mock(auth=auth))), \
+                mock.patch.object(api, "service_client", return_value=mock.MagicMock()), mock.patch.object(api, "_purge_audio"):
+            r = TestClient(api.app).request("DELETE", "/api/me/data", headers=AUTH,
+                                            json={"confirm": "DELETE", "password": "pw", "captcha_token": "turnstile-token"})
+    finally:
+        api.app.dependency_overrides.clear()
+    assert r.status_code == 200
+    auth.sign_in_with_password.assert_called_once_with({"email": "p@example.com", "password": "pw", "options": {"captcha_token": "turnstile-token"}})
 
 
 def test_delete_my_data_wipes_audio_then_account():

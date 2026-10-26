@@ -202,19 +202,22 @@ def _auth_client():
     return create_client(url, key, options=SyncClientOptions(httpx_client=_connections()))
 
 
-def _password_ok(email, password) -> bool:
-    """Re-authentication before destructive actions. shortcut: accounts without a password (magic link/OAuth) cannot pass yet."""
+def _password_ok(email, password, captcha_token) -> bool:
+    """Re-authentication before destructive actions: a real sign-in, so Supabase's CAPTCHA needs the delete screen's token.
+    shortcut: accounts without a password (magic link/OAuth) cannot pass yet."""
     from supabase_manager import SupabaseManager
     try:
-        return bool(SupabaseManager().client.auth.sign_in_with_password({"email": email, "password": password}).user)
-    except Exception:
+        return bool(SupabaseManager().client.auth.sign_in_with_password(
+            {"email": email, "password": password, "options": {"captcha_token": captcha_token}}).user)
+    except Exception as e:
+        print(f"[!] Re-authentication refused: {e}")   # e.g. a wrong password or a missing/invalid CAPTCHA token
         return False
 
 
-def _reauth_ok(user, token, password) -> bool:
+def _reauth_ok(user, token, password, captcha_token=None) -> bool:
     """Password accounts must re-enter the password; passwordless accounts (magic link / OAuth) must have signed in within 5 minutes."""
     if "email" in (user.app_metadata or {}).get("providers", []):
-        return bool(password) and _password_ok(user.email, password)
+        return bool(password) and _password_ok(user.email, password, captcha_token)
     claims = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
     return any(time.time() - a.get("timestamp", 0) < 300 for a in claims.get("amr", []))  # time of the last real sign-in, not of a token refresh
 
@@ -590,7 +593,8 @@ async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
 
 class DeleteDataRequest(BaseModel):
     confirm: str
-    password: Optional[str] = None
+    password: Optional[str] = Field(default=None, max_length=256)
+    captcha_token: Optional[str] = Field(default=None, max_length=4096)   # Turnstile token from the delete screen
 
 
 def _purge_audio(writer, uid: str) -> None:
@@ -620,7 +624,7 @@ def delete_my_data(req: DeleteDataRequest, authorization: str = Header(...), use
     """
     if req.confirm != "DELETE":
         raise HTTPException(status_code=400, detail='Send {"confirm": "DELETE"} to proceed.')
-    if not _reauth_ok(user, authorization.partition(" ")[2], req.password):
+    if not _reauth_ok(user, authorization.partition(" ")[2], req.password, req.captcha_token):
         raise HTTPException(status_code=403, detail="Re-authentication failed.")
     uid = str(UUID(str(user.id)))  # also guards the local path below
     writer = service_client()
@@ -793,6 +797,8 @@ def create_clinical_pdf_report(
     missing = [k for k, v in biomarkers.items() if v is None and k != "formant_compression_index"]
     if missing:
         raise HTTPException(status_code=422, detail=f"Session lacks measured values: {missing}")
+    vowels = (row.get("metrics") or {}).get("vowel_space") or {}   # the vowel-space chart's points, stored by /api/session/analyze
+    biomarkers.update({k: vowels.get(k) for k in ("mean_f1", "mean_f2", "f1_dispersion", "f2_dispersion")})
 
     report_data = {
         "session_id": session_id,

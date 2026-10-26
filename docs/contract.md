@@ -66,7 +66,7 @@ Owner of the logic: `src/vocabulary.py`; written only by `POST /api/sessions/{id
 | `POST /api/sessions/{id}/finish` | — | `{duration_seconds, utterances_count, accuracy_rate}` |
 | `POST /api/session/analyze` | form: `session_id`, `file` (audio) | `{success, biomarkers}`; needs `SUPABASE_SERVICE_ROLE_KEY` |
 | `POST /api/session/report/pdf` | `{session_id, inline?}` | PDF; 422 if no assessment or unmeasured values |
-| `DELETE /api/me/data` | `{confirm: "DELETE", password?}` (email accounts must send the password; passwordless accounts need a sign-in within 5 minutes) | `{success}`; audio first, then account; 3 per hour |
+| `DELETE /api/me/data` | `{confirm: "DELETE", password?, captcha_token?}` (email accounts must send the password and a fresh CAPTCHA token from the delete screen, because Supabase checks the password with a CAPTCHA-protected sign-in; passwordless accounts need a sign-in within 5 minutes) | `{success}`; audio first, then account; 3 per hour |
 | `POST /api/rectify` | audio (multipart or base64 JSON) | `{speech_detected, raw_transcript, repaired_text, rectified_audio, voice_error, latency, telemetry}`. If no speech is detected (silence, noise) or nothing was understood, the text is `""` and `rectified_audio` is `null`: the patient's own recording is never returned as "rectified". `WS /ws/rectify` sends `{"type": "no_speech"}` instead of `rectified_output`, whose `voice_error` works as above. Both speak with the saved voice profile, or not at all |
 | `PUT /api/voice/profile` | a voice profile (see above) | `{success, profile}`; 422 if out of range |
 | `POST /api/biomarkers`, `/api/voice/sculpt`, `/api/voice/bank`, `GET /health`, `WS /ws/rectify` | see `src/api.py` | |

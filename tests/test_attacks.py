@@ -172,7 +172,7 @@ def _ws_utterances(n, hit):
             ws.send_text(json.dumps({"type": "auth", "token": "t", "sample_rate": 16000, "encoding": "pcm_s16le"}))
             replies = []
             for _ in range(n):
-                for chunk in [loud] * 6 + [quiet] * 8:
+                for chunk in [loud] * 6 + [quiet] * 16:
                     ws.send_bytes(chunk)
                 while not replies or replies[-1]["type"] == "telemetry":
                     replies.append(ws.receive_json())

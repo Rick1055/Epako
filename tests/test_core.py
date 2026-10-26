@@ -736,7 +736,7 @@ def test_websocket_reports_no_speech_instead_of_transcribing_noise():
     with mock.patch.object(api, "verify_token", return_value=mock.Mock(id="ws-user-3")), mock.patch.object(api, "contains_speech", return_value=False),          mock.patch.object(api, "get_asr_engine", asr_loader):
         with TestClient(api.app).websocket_connect("/ws/rectify") as ws:
             ws.send_text(json.dumps({"type": "auth", "token": "t", "sample_rate": 16000, "encoding": "pcm_s16le"}))
-            for chunk in [loud] * 6 + [quiet] * 8:
+            for chunk in [loud] * 6 + [quiet] * 16:
                 ws.send_bytes(chunk)
             seen = []
             while not seen or seen[-1]["type"] == "telemetry":
@@ -790,6 +790,75 @@ def test_the_patients_learning_is_read_in_one_database_request():
     assert user_db.reads == 1 and engine.vocabulary is not None   # one round trip, and it saw the repeats: snapping is on
 
 
+def _stream_through_the_websocket(audio, real_stream_vad=None):
+    """Streams float audio as 100 ms chunks, as a browser sends it, through the real handler and the real speech detector;
+    the recogniser is a stand-in that records how much audio it was given. Returns (replies, seconds given to the recogniser)."""
+    import json
+    from fastapi.testclient import TestClient
+    import api
+    from intent_repair import IntentRepair
+    given = []
+    asr = mock.Mock()
+    asr.transcribe.side_effect = lambda a, sample_rate=16000: given.append(len(a) / 16000) or {"text": "hello", "words": None, "latency_ms": 1.0}
+    voice = mock.AsyncMock(return_value={"audio": np.zeros(1600, dtype="float32"), "latency_ms": 1.0})
+    pcm = (np.clip(audio, -1, 1) * 32767).astype("<i2").tobytes()
+    with mock.patch.object(api, "verify_token", return_value=mock.Mock(id="ws-stream")), mock.patch.object(api, "get_asr_engine", return_value=asr), \
+            mock.patch.object(api, "get_repair_engine", return_value=IntentRepair()), mock.patch.object(api, "get_voice", return_value={}), \
+            mock.patch.object(api, "synthesize_neural_async", voice):
+        with TestClient(api.app).websocket_connect("/ws/rectify") as ws:
+            ws.send_text(json.dumps({"type": "auth", "token": "t", "sample_rate": 16000, "encoding": "pcm_s16le"}))
+            for i in range(0, len(pcm), 3200):
+                ws.send_bytes(pcm[i:i + 3200])
+            ws.send_text(json.dumps({"type": "ping"}))   # answered only after everything sent before it was handled
+            replies = []
+            while not replies or replies[-1]["type"] != "pong":
+                replies.append(ws.receive_json())
+    return [r for r in replies if r["type"] not in ("telemetry", "pong")], given
+
+
+needs_voice = pytest.mark.skipif(not (ROOT / "models/piper/en_US-ryan-medium.onnx").exists(), reason="Piper voices not downloaded")
+
+
+@needs_voice
+@pytest.mark.parametrize("pause_s", [1.0, 1.4])
+def test_a_pause_inside_a_sentence_does_not_cut_it_in_two(real_stream_vad, pause_s):
+    # dysarthric speech pauses mid-sentence; ending the utterance at 0.7 s of quiet sent half of it (live, 2026-10-26)
+    import local_tts
+    said = local_tts.synthesize("The morning sun gently illuminates the quiet cedar grove.")["audio"]
+    silence = lambda s: np.zeros(int(16000 * s), dtype="float32")
+    audio = np.concatenate([silence(0.5), said, silence(pause_s), said, silence(2.5)])
+    replies, given = _stream_through_the_websocket(audio)
+    assert [r["type"] for r in replies] == ["rectified_output"] and len(given) == 1
+    assert given[0] >= 2 * len(said) / 16000 + pause_s - 0.1   # the whole sentence, pause included, in one piece
+
+
+@needs_voice
+def test_soft_speech_is_heard_where_a_fixed_loudness_level_missed_it(real_stream_vad):
+    import local_tts
+    said = local_tts.synthesize("Please bring me a glass of water.")["audio"]
+    soft = (said * 0.06).astype("float32")
+    assert np.sqrt(np.mean(soft ** 2)) < 0.015   # below the old loudness cut-off, which never started listening
+    replies, given = _stream_through_the_websocket(np.concatenate([np.zeros(8000, dtype="float32"), soft, np.zeros(16000 * 2, dtype="float32")]))
+    assert [r["type"] for r in replies] == ["rectified_output"] and given[0] >= len(said) / 16000 - 0.2
+
+
+@needs_voice
+def test_the_start_of_a_sentence_is_not_clipped(real_stream_vad):
+    import local_tts
+    said = local_tts.synthesize("Please bring me a glass of water.")["audio"]
+    replies, given = _stream_through_the_websocket(np.concatenate([np.zeros(16000, dtype="float32"), said, np.zeros(16000 * 2, dtype="float32")]))
+    assert given[0] >= len(said) / 16000   # none of the speech is lost before the detector decides it is speech
+
+
+def test_noise_and_silence_start_no_utterance(real_stream_vad):
+    rng2 = np.random.default_rng(1)
+    for audio in ((0.3 * rng2.standard_normal(16000 * 3)).astype("float32"),   # loud broadband noise: loud, but not speech
+                  (0.3 * np.sin(2 * np.pi * 50 * np.arange(16000 * 3) / 16000)).astype("float32"),   # mains hum
+                  np.zeros(16000 * 3, dtype="float32")):
+        replies, given = _stream_through_the_websocket(audio)
+        assert [r["type"] for r in replies] == [] and given == []
+
+
 def test_websocket_snaps_unsure_words_too():
     import json
     from fastapi.testclient import TestClient
@@ -805,7 +874,7 @@ def test_websocket_snaps_unsure_words_too():
             mock.patch.object(api, "get_voice", return_value={}):
         with TestClient(api.app).websocket_connect("/ws/rectify") as ws:
             ws.send_text(json.dumps({"type": "auth", "token": "t", "sample_rate": 16000, "encoding": "pcm_s16le"}))
-            for chunk in [loud] * 6 + [quiet] * 8:
+            for chunk in [loud] * 6 + [quiet] * 16:
                 ws.send_bytes(chunk)
             seen = []
             while not seen or seen[-1]["type"] == "telemetry":
@@ -856,7 +925,7 @@ def test_websocket_reads_the_patients_learning_and_voice_while_the_recogniser_ru
             mock.patch.object(api, "get_repair_engine", side_effect=together(IntentRepair())), mock.patch.object(api, "get_voice", side_effect=together({})):
         with TestClient(api.app).websocket_connect("/ws/rectify") as ws:
             ws.send_text(json.dumps({"type": "auth", "token": "t", "sample_rate": 16000, "encoding": "pcm_s16le"}))
-            for chunk in [loud] * 6 + [quiet] * 8:
+            for chunk in [loud] * 6 + [quiet] * 16:
                 ws.send_bytes(chunk)
             seen = []
             while not seen or seen[-1]["type"] == "telemetry":
@@ -981,7 +1050,7 @@ def test_websocket_speaks_with_the_saved_voice_or_sends_the_text_alone(saved):
             mock.patch.object(api, "get_repair_engine", return_value=IntentRepair()), mock.patch.object(api, "user_client", return_value=user_db):
         with TestClient(api.app).websocket_connect("/ws/rectify") as ws:
             ws.send_text(json.dumps({"type": "auth", "token": "t", "sample_rate": 16000, "encoding": "pcm_s16le"}))
-            for chunk in [loud] * 6 + [quiet] * 8:
+            for chunk in [loud] * 6 + [quiet] * 16:
                 ws.send_bytes(chunk)
             seen = []
             while not seen or seen[-1]["type"] == "telemetry":

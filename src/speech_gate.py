@@ -52,3 +52,36 @@ def speech_probabilities(audio, sample_rate=16000):
 def contains_speech(audio, sample_rate=16000, threshold=THRESHOLD):
     probs = speech_probabilities(audio, sample_rate)
     return bool(len(probs) and probs.max() >= threshold)
+
+
+# Live-stream endpointing, chosen on 56 real TORGO clips streamed as 100 ms chunks (2026-10-26): exactly one utterance for
+# 56/56 (the old loudness rule: 50/56), and the streamed transcript differs from the whole-clip one on 12-13% of words
+# against 16% for merely padding the clip with silence, and 23% for the old rule.
+START_P = 0.5        # a chunk this likely to be speech starts an utterance
+STOP_P = 0.35        # below this a chunk counts as quiet
+END_QUIET_S = 1.5    # quiet this long ends it: dysarthric speech pauses mid-sentence
+PRE_ROLL_S = 0.3     # audio kept from before the start, so a soft onset is not clipped
+MIN_SPEECH_S = 0.3   # shorter than this in total is a click or a cough, not an utterance
+
+
+class StreamVAD:
+    """speech_probabilities for audio that arrives in chunks: keeps the model's state and the last few samples between
+    chunks, so it gives the same per-window probabilities as the whole recording would."""
+
+    def __init__(self):
+        self.session = _session()
+        self.state = np.zeros((2, 1, 128), dtype=np.float32)
+        self.context = np.zeros(_CONTEXT, dtype=np.float32)
+        self.rest = np.zeros(0, dtype=np.float32)
+
+    def feed(self, chunk):
+        """Highest speech probability over the complete 32 ms windows this chunk completes (0.0 if none)."""
+        x = np.concatenate([self.rest, np.asarray(chunk, dtype=np.float32)])
+        best, sr = 0.0, np.array(16000, dtype=np.int64)
+        for i in range(0, len(x) - _WINDOW + 1, _WINDOW):
+            window = x[i:i + _WINDOW]
+            out, self.state = self.session.run(None, {"input": np.concatenate([self.context, window])[None, :], "state": self.state, "sr": sr})
+            best = max(best, float(out[0, 0]))
+            self.context = window[-_CONTEXT:]
+        self.rest = x[len(x) // _WINDOW * _WINDOW:]
+        return best

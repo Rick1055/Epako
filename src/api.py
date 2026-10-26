@@ -22,7 +22,7 @@ import numpy as np
 import librosa
 import soundfile as sf
 import local_tts
-from speech_gate import contains_speech
+from speech_gate import contains_speech, StreamVAD, START_P, STOP_P, END_QUIET_S, PRE_ROLL_S, MIN_SPEECH_S
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Request, Response, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -896,10 +896,9 @@ async def websocket_speech_rectifier(websocket: WebSocket):
     audio_buffer = np.zeros(max_buffer, dtype=np.float32)
     buffered = 0
     is_speaking = False
-    silence_frames = 0
-    silence_threshold = 0.015
-    min_speech_frames = 5
-    max_silence_frames = 7
+    quiet_samples = voiced_samples = 0
+    pre_roll = []   # the last PRE_ROLL_S of audio before speech starts, so a soft onset is not clipped
+    vad = await asyncio.to_thread(StreamVAD)
     last_auth = time.monotonic()
 
     try:
@@ -939,16 +938,27 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                 continue
 
             rms = float(np.sqrt(np.mean(chunk**2))) if len(chunk) > 0 else 0.0
+            p = await asyncio.to_thread(vad.feed, chunk)   # speech or not is decided by Silero, not by loudness
 
-            if rms > silence_threshold:
-                is_speaking = True
-                silence_frames = 0
-            elif is_speaking:
-                silence_frames += 1
+            to_buffer = [chunk]
+            if not is_speaking:
+                pre_roll.append(chunk)
+                while len(pre_roll) > 1 and sum(map(len, pre_roll)) > PRE_ROLL_S * 16000:
+                    pre_roll.pop(0)
+                if p >= START_P:
+                    is_speaking, quiet_samples, voiced_samples = True, 0, 0
+                    to_buffer, pre_roll = pre_roll, []
+                else:
+                    to_buffer = []
             if is_speaking:
-                n = min(len(chunk), max_buffer - buffered)
-                audio_buffer[buffered:buffered + n] = chunk[:n]
-                buffered += n
+                if p >= STOP_P:
+                    quiet_samples, voiced_samples = 0, voiced_samples + len(chunk)
+                else:
+                    quiet_samples += len(chunk)
+                for c in to_buffer:
+                    n = min(len(c), max_buffer - buffered)
+                    audio_buffer[buffered:buffered + n] = c[:n]
+                    buffered += n
 
             # Send immediate live telemetry back to animate frontend oscilloscope
             await websocket.send_json({
@@ -959,11 +969,16 @@ async def websocket_speech_rectifier(websocket: WebSocket):
             })
 
             # When speech ends, run rectification
-            if is_speaking and (buffered >= max_buffer or (silence_frames >= max_silence_frames and buffered >= (min_speech_frames * len(chunk)))):
+            if is_speaking and (buffered >= max_buffer or quiet_samples >= END_QUIET_S * 16000):
                 utterance_audio = audio_buffer[:buffered].copy()
+                too_short = voiced_samples < MIN_SPEECH_S * 16000
                 buffered = 0
                 is_speaking = False
-                silence_frames = 0
+                quiet_samples = voiced_samples = 0
+
+                if too_short:   # a click or a cough
+                    await websocket.send_json({"type": "no_speech"})
+                    continue
 
                 start_rectify = time.time()
 

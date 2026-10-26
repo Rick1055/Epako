@@ -110,6 +110,27 @@ def test_the_server_stops_reading_an_oversized_upload_early():
     assert status == 413 and len(pulled) <= 2 * api._MAX_UPLOAD_BYTES // (1024 * 1024) + 1, (status, len(pulled))
 
 
+def test_voice_banking_with_odd_file_names_and_no_speech_answers_clearly_and_leaves_no_files(tmp_path, monkeypatch):
+    # the client's file name gave the temp file its extension: ".w:av" is an NTFS alternate data stream (the cleanup
+    # removed only the stream) and a 300-character one cannot be created; notes without speech raised a bare 500
+    import tempfile
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    silent = _wav_header(16000, n_samples=16000)   # a valid second of silence: no clear speech
+    files = [("files", ("note.w:av", silent, "audio/wav")), ("files", ("note." + "x" * 300, silent, "audio/wav"))]
+    garbage = [("files", (f"n{i}.wav", b"\x00garbage" * 500, "audio/wav")) for i in range(2)]
+    _signed_in()
+    try:
+        with mock.patch.object(api, "hit"):
+            c = TestClient(api.app, raise_server_exceptions=False)
+            r = c.post("/api/voice/bank", headers={"Authorization": "Bearer t"}, files=files)
+            corrupt = c.post("/api/voice/bank", headers={"Authorization": "Bearer t"}, files=garbage)
+    finally:
+        api.app.dependency_overrides.clear()
+    assert r.status_code == 422 and "speech" in r.json()["detail"], (r.status_code, r.text[:120])
+    assert corrupt.status_code == 400, (corrupt.status_code, corrupt.text[:120])
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_voice_banking_refuses_a_flood_of_files():
     _signed_in()
     files = [("files", (f"n{i}.wav", _wav_header(16000), "audio/wav")) for i in range(50)]

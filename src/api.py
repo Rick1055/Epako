@@ -7,6 +7,7 @@ import os
 import io
 import time
 import json
+import re
 import base64
 import tempfile
 from datetime import datetime, timezone
@@ -593,11 +594,18 @@ async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
             data = await f.read(_MAX_UPLOAD_BYTES + 1)
             if len(data) > _MAX_UPLOAD_BYTES:
                 raise HTTPException(status_code=413, detail="Upload too large.")
-            with tempfile.NamedTemporaryFile(suffix=os.path.splitext(os.path.basename(f.filename or ""))[1], delete=False) as buffer:
+            # only a plain extension from the client's file name: ".w:av" is an NTFS stream, a long one cannot be created
+            ext = os.path.splitext(os.path.basename(f.filename or ""))[1]
+            with tempfile.NamedTemporaryFile(suffix=ext if re.fullmatch(r"\.[A-Za-z0-9]{1,8}", ext) else "", delete=False) as buffer:
                 buffer.write(data)
                 temp_paths.append(buffer.name)
 
-        profile = await asyncio.to_thread(restoration_eng.create_profile_from_voice_notes, temp_paths, min_notes=2)
+        try:
+            profile = await asyncio.to_thread(restoration_eng.create_profile_from_voice_notes, temp_paths, min_notes=2)
+        except ValueError as e:   # no clear speech in enough of the notes
+            raise fail(422, "No clear speech found in the voice notes; please upload recordings of the person talking.", e)
+        except Exception as e:
+            raise fail(400, "Unsupported or corrupt audio.", e)
         return {
             "success": True,
             "profile": profile,

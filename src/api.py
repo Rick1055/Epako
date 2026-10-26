@@ -45,6 +45,32 @@ _MAX_WS_CHUNK_BYTES = 256 * 1024
 _MAX_VOICE_NOTES = 10
 _MAX_SOCKETS_PER_USER = 2   # each live socket holds a 30 s audio buffer
 _open_sockets = collections.Counter()   # shortcut: per worker process; move to Postgres if you run several workers
+_MAX_BODY_BYTES = {"/api/voice/bank": (_MAX_VOICE_NOTES + 1) * _MAX_UPLOAD_BYTES}   # elsewhere: one upload as base64, 2x
+
+
+class BodyLimit:
+    """Stops reading a request body past its route's cap as it arrives. A chunked upload has no Content-Length, and
+    FastAPI reads or spools a whole body to disk before any route can check its size."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        cap, seen = _MAX_BODY_BYTES.get(scope["path"], 2 * _MAX_UPLOAD_BYTES), 0
+
+        async def bounded():
+            nonlocal seen
+            message = await receive()
+            seen += len(message.get("body", b""))
+            if seen > cap:
+                raise HTTPException(status_code=413, detail="Upload too large.")
+            return message
+        await self.app(scope, bounded, send)
+
+
+app.add_middleware(BodyLimit)
 
 # CORS Middleware - origins come from CORS_ALLOWED_ORIGINS (comma-separated); default is none
 app.add_middleware(
@@ -366,6 +392,8 @@ async def rectify_speech(
             b64_str = body.get("audio_base64", "").split(",")[-1]
             if b64_str:
                 raw_bytes = base64.b64decode(b64_str)
+        except HTTPException:
+            raise   # 413 from BodyLimit
         except Exception as e:
             raise fail(400, "Invalid JSON payload.", e)
     elif file is not None:
@@ -378,6 +406,8 @@ async def rectify_speech(
                 raw_bytes = await form["file"].read()
             elif "audio_base64" in form:
                 raw_bytes = base64.b64decode(str(form["audio_base64"]).split(",")[-1])
+        except HTTPException:
+            raise   # 413 from BodyLimit
         except Exception:
             pass
 

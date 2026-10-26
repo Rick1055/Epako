@@ -68,6 +68,48 @@ def test_poisoned_audio_gets_a_clean_refusal_not_a_crash(payload):
     assert 400 <= rect.status_code < 500 and 400 <= bio.status_code < 500, (rect.status_code, bio.status_code)
 
 
+@pytest.mark.parametrize("route,content_type", [("/api/rectify", "application/json"),
+                                                ("/api/rectify", "multipart/form-data; boundary=b"),
+                                                ("/api/biomarkers", "multipart/form-data; boundary=b"),
+                                                ("/api/voice/bank", "multipart/form-data; boundary=b")])
+def test_an_oversized_upload_without_a_length_header_is_cut_off(route, content_type):
+    # a chunked upload carries no Content-Length, so the header check never saw it: the body was read into memory or
+    # spooled to disk whole before any route could check its size (2026-10-26)
+    def body():
+        for _ in range(120):   # 120 MB, never announced: above every route's cap
+            yield b"x" * (1024 * 1024)
+    _signed_in()
+    try:
+        with mock.patch.object(api, "hit"), mock.patch.object(api, "get_asr_engine", side_effect=AssertionError("must not reach the recogniser")):
+            r = TestClient(api.app, raise_server_exceptions=False).post(route, content=body(), headers={"Authorization": "Bearer t", "Content-Type": content_type})
+    finally:
+        api.app.dependency_overrides.clear()
+    assert r.status_code == 413, (route, r.status_code, r.text[:100])
+
+
+def test_the_server_stops_reading_an_oversized_upload_early():
+    import asyncio
+    pulled, sent = [], []
+
+    async def receive():   # 1 MB at a time, 120 MB in all, as a slow client would send it
+        pulled.append(1)
+        return {"type": "http.request", "body": b"x" * (1024 * 1024), "more_body": len(pulled) < 120}
+
+    async def send(message):
+        sent.append(message)
+    scope = {"type": "http", "method": "POST", "path": "/api/rectify", "raw_path": b"/api/rectify", "root_path": "", "query_string": b"",
+             "headers": [(b"authorization", b"Bearer t"), (b"content-type", b"application/json")],
+             "http_version": "1.1", "scheme": "http", "server": ("test", 80), "client": ("test", 1)}
+    _signed_in()
+    try:
+        with mock.patch.object(api, "hit"):
+            asyncio.run(api.app(scope, receive, send))
+    finally:
+        api.app.dependency_overrides.clear()
+    status = next(m["status"] for m in sent if m["type"] == "http.response.start")
+    assert status == 413 and len(pulled) <= 2 * api._MAX_UPLOAD_BYTES // (1024 * 1024) + 1, (status, len(pulled))
+
+
 def test_voice_banking_refuses_a_flood_of_files():
     _signed_in()
     files = [("files", (f"n{i}.wav", _wav_header(16000), "audio/wav")) for i in range(50)]

@@ -60,6 +60,21 @@ def attack_api(api, token, sess, names):
         check(f"API: {name} gets patient A's session report", requests.post(f"{api}/api/session/report/pdf", headers=h, timeout=60,
               json={"session_id": sess[ua]}).status_code == 404)
         check(f"API: {name} finishes patient A's session", finish(who, ua) == 404)
+    # a 120 MB upload that never announces its size (chunked): the server must stop reading and stay up
+    sent = []
+
+    def flood():
+        for _ in range(120):
+            sent.append(1)
+            yield b"x" * (1024 * 1024)
+    try:
+        answer = requests.post(f"{api}/api/rectify", data=flood(), timeout=120,
+                               headers={"Authorization": f"Bearer {token[ua]}", "Content-Type": "application/json"}).status_code
+    except requests.ConnectionError:
+        answer = "connection closed by the server"
+    alive = requests.get(f"{api}/health", timeout=30).status_code == 200
+    check(f"API: a 120 MB upload with no length header is cut off ({answer}, {len(sent)} MB sent) and the server stays up",
+          answer in (413, "connection closed by the server") and alive, answer)
     # many requests at once over the shared connections: every owner must get 200 and every intruder 404
     jobs = [(who, owner) for _ in range(6) for who in (ua, ub) for owner in (ua, ub)]
     with ThreadPoolExecutor(8) as pool:

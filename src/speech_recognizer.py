@@ -20,8 +20,8 @@ def word_confidences(pieces):
 
 class DysarthriaSpeechRecognizer:
     """
-    SOTA Dysarthric Speech Recognizer using Parakeet-TDT (FastConformer).
-    Pre-trained on the Speech Accessibility Project (SAP) and fine-tuned for motor speech disorders.
+    Dysarthric speech recogniser: Parakeet-TDT (FastConformer), the dys-asr checkpoint, which its authors describe as
+    trained with Speech Accessibility Project data. On full TORGO (2026-10-25): 41.9% WER on dysarthric speech, 12.0% on control.
     Runs in FP16 on NVIDIA GPUs (measured 2026-10-25 on an RTX 3050, real TORGO clips: median 187 ms, p90 326 ms).
     """
 

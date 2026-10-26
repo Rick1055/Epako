@@ -1,14 +1,6 @@
 """
-Epako Voice AI - Clinical Speech API & Low-Latency Streaming Gateway
-FastAPI + WebSockets + Acoustic Telemetry + Supabase Integration
-
-Endpoints:
-- WS   /ws/rectify        : Full-duplex streaming audio rectification & real-time telemetry
-- POST /api/rectify       : Batch audio speech rectification & neural voice restoration
-- POST /api/biomarkers    : Clinical bio-acoustic telemetry extraction (Speech Gym)
-- POST /api/voice/sculpt  : Real-time vocal parameter sculpting (Warmth, Cadence, Pitch)
-- POST /api/voice/bank    : Pre-morbid voice note acoustic extraction & profile banking
-- GET  /health            : Liveness probe
+Epako Voice AI API (FastAPI): dysarthric speech in, corrected text and speech in the patient's chosen voice out,
+plus sessions, server-measured biomarkers and the clinician's PDF report. Routes and tables: docs/contract.md.
 """
 
 import os
@@ -17,7 +9,6 @@ import time
 import json
 import base64
 import tempfile
-import shutil
 from datetime import datetime, timezone
 import threading
 import functools
@@ -41,7 +32,7 @@ load_dotenv()
 
 app = FastAPI(
     title="Epako Voice AI API",
-    description="Compassionate Biological Speech Restoration & Clinical Telemetry Gateway",
+    description="Dysarthric speech correction and session telemetry",
     version="1.0.0",
     docs_url=None,
     redoc_url=None,
@@ -360,8 +351,7 @@ async def rectify_speech(
     user=Depends(rate_limit("rectify", 30)),
 ):
     """
-    Core Biological Voice Rectification Pipeline:
-    Audio Input (Multipart File or JSON Base64) -> Dysarthria ASR -> Intent Repair -> Personalized Voice Restoration
+    Speech correction: audio (multipart file or JSON base64) -> speech gate -> recogniser -> repair -> the patient's saved voice
     """
     start_total = time.time()
     raw_bytes = None
@@ -558,7 +548,8 @@ async def sculpt_voice_timbre(request: VoiceSculptRequest):
 @app.post("/api/voice/bank", dependencies=[Depends(rate_limit("bank", 5))])
 async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
     """
-    Pre-Morbid Voice Banking: Reconstructs biological timbre from historical voice recordings.
+    Voice banking: estimates voice settings (closest stock voice, pitch, rate, warmth, roughness) from recordings
+    made before the illness. It does not clone the voice.
     """
     if len(files) < 2:
         raise HTTPException(status_code=400, detail="Please upload at least 2 clean voice notes.")
@@ -580,7 +571,7 @@ async def bank_premorbid_voice(files: List[UploadFile] = File(...)):
         return {
             "success": True,
             "profile": profile,
-            "message": "Biological timbre successfully banked and calibrated.",
+            "message": "Voice settings estimated from your recordings. Save them to use them, or adjust them first.",
         }
     finally:
         for p in temp_paths:
@@ -618,7 +609,7 @@ def _purge_audio(writer, uid: str) -> None:
 @app.delete("/api/me/data")
 def delete_my_data(req: DeleteDataRequest, authorization: str = Header(...), user=Depends(rate_limit("delete", 3, 3600))):
     """
-    Permanently erases the caller's account: stored audio, local feedback data, then the auth user,
+    Permanently erases the caller's account: stored audio, then the auth user,
     whose deletion cascades to profile, sessions, biomarkers, utterances, grants and link codes.
     Audio goes first so a failure leaves the account intact and the request can be retried.
     """
@@ -626,13 +617,12 @@ def delete_my_data(req: DeleteDataRequest, authorization: str = Header(...), use
         raise HTTPException(status_code=400, detail='Send {"confirm": "DELETE"} to proceed.')
     if not _reauth_ok(user, authorization.partition(" ")[2], req.password, req.captcha_token):
         raise HTTPException(status_code=403, detail="Re-authentication failed.")
-    uid = str(UUID(str(user.id)))  # also guards the local path below
+    uid = str(UUID(str(user.id)))
     writer = service_client()
     try:
         _purge_audio(writer, uid)
     except Exception as e:
         raise fail(500, "Audio deletion failed; nothing else was deleted.", e)
-    shutil.rmtree(os.path.join("data", "patient_profiles", uid), ignore_errors=True)
     try:
         writer.auth.admin.delete_user(uid)
     except Exception as e:
@@ -756,7 +746,7 @@ async def analyze_session_audio(
 
 
 # ---------------------------------------------------------------------------
-# Clinical PDF Evaluation Report Generator (SLP / Insurance CPT Reimbursement)
+# Clinical PDF report, built only from stored rows
 # ---------------------------------------------------------------------------
 @app.post("/api/session/report/pdf")
 def create_clinical_pdf_report(
@@ -843,8 +833,8 @@ async def websocket_speech_rectifier(websocket: WebSocket):
     """
     Full-Duplex Streaming Speech Rectification.
     The client streams audio frames in real time.
-    The server returns live RMS/cadence telemetry while speaking, and instantly
-    emits the rectified audio stream when a pause is detected.
+    The server returns live loudness telemetry while the patient speaks, and the corrected
+    text and speech when a pause is detected.
     """
     await websocket.accept()
     try:

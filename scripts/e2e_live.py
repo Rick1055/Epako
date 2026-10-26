@@ -81,7 +81,8 @@ def main():
         files = [("files", (os.path.basename(n), open(n, "rb").read(), "audio/wav")) for n in notes]
         r = requests.post(f"{api}/api/voice/bank", headers=H, files=files, timeout=300)
         banked = r.json().get("profile", {}) if r.ok else {}
-        step("4. voice banking builds a profile from healthy voice notes", r.ok and banked.get("template"), f"{r.status_code} template={banked.get('template')}")
+        step("4. voice banking gives a woman's healthy voice notes a female voice", r.ok and str(banked.get("template")).startswith("female"),
+             f"{r.status_code} template={banked.get('template')}, F0 {banked.get('reconstructed_f0')} Hz")
         voice = {k: banked[k] for k in ("template", "pitch_hz", "rate_pct", "volume_pct", "warmth_pct", "roughness_pct")} if banked else {}
         r = requests.put(f"{api}/api/voice/profile", headers=H, json=voice, timeout=60)
         step("5. the banked voice is saved as the patient's voice", r.ok, r.status_code)

@@ -280,10 +280,10 @@ def test_local_tts_applies_rate_volume_and_resamples():
     assert out["audio"].shape[0] == pytest.approx(1600, abs=2)
 
 
-def _voice_like(sr=16000, seconds=1.0):
+def _voice_like(sr=16000, seconds=1.0, f0=150):
     t = np.arange(int(sr * seconds)) / sr
-    harmonics = sum(np.sin(2 * np.pi * 150 * k * t) / k for k in range(1, 30))
-    return (0.3 * harmonics * (0.5 + 0.5 * np.sin(2 * np.pi * 4 * t) ** 2)).astype("float32")   # 150 Hz voice, 4 syllables/s
+    harmonics = sum(np.sin(2 * np.pi * f0 * k * t) / k for k in range(1, 30) if f0 * k < sr / 2)
+    return (0.3 * harmonics * (0.5 + 0.5 * np.sin(2 * np.pi * 4 * t) ** 2)).astype("float32")   # a voice at f0, 4 syllables/s
 
 
 def test_warmth_darkens_or_brightens_and_roughness_adds_texture_measured_as_voice_banking_measures_them():
@@ -1007,6 +1007,22 @@ def test_a_missing_voice_engine_is_a_clear_503_not_a_crash():
     finally:
         api.app.dependency_overrides.clear()
     assert put.status_code == sculpt.status_code == e.value.status_code == 503
+
+
+def test_voice_banking_hears_the_voice_not_the_quiet_background(tmp_path):
+    # real recordings: the pitch tracker called quiet background "voiced" at its 65 Hz floor, so a woman (TORGO FC02,
+    # 198 Hz) was banked as a man; and a note without speech counted as an invented 150 Hz (measured 2026-10-26)
+    import soundfile as sf
+    from voice_restoration import VoiceRestorationEngine
+    t = np.arange(16000 * 3) / 16000
+    hum = (0.01 * np.sin(2 * np.pi * 66 * t)).astype("float32")   # quiet low rumble, longer than the speech
+    notes = []
+    for i, audio in enumerate([np.concatenate([_voice_like(seconds=1.0, f0=210), hum])] * 2 + [np.zeros(16000 * 2, dtype="float32")]):
+        sf.write(tmp_path / f"n{i}.wav", audio, 16000)
+        notes.append(str(tmp_path / f"n{i}.wav"))
+    banked = VoiceRestorationEngine().create_profile_from_voice_notes(notes)
+    assert banked["gender"] == "female" and banked["template"].startswith("female")
+    assert 190 < banked["reconstructed_f0"] < 230 and banked["voice_notes_count"] == 2   # the silent note is skipped, not 150 Hz
 
 
 def test_voice_banking_returns_a_profile_that_can_be_saved_as_is(tmp_path):

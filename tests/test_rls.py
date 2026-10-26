@@ -264,6 +264,11 @@ def test_audio_storage_needs_consent_and_own_folder(db):
     assert db.q(None, None, "select public from storage.buckets where id='patient_audio'") == [(False,)]
 
 
+def test_the_audio_bucket_takes_only_audio_of_at_most_one_upload(db):
+    # enforced by the Storage API; attacked live in scripts/attack_live.py
+    assert db.q(None, None, "select file_size_limit, allowed_mime_types from storage.buckets where id='patient_audio'") == [(10485760, ["audio/*"])]
+
+
 def test_progress_view_has_no_identity(db):
     cols = {r[0] for r in db.q(None, None, "select column_name from information_schema.columns where table_name='patient_daily_progress'")}
     assert not cols & {"full_name", "condition_type", "email"}

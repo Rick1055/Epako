@@ -158,6 +158,9 @@ def main():
         uploaded = attempt(lambda: audio.upload(f"{ua}/consented.wav", b"RIFF", {"content-type": "audio/wav"}))[0]
         print(f"sanity: patient A sees own sessions={len(own) == 1}, saves own voice={bool(saved)}, uploads after consenting={uploaded}")
         results.append(len(own) == 1 and bool(saved) and uploaded)
+        # even with consent, only audio of a sane size belongs in the bucket (migration 20261101)
+        check("patient A stores a 12 MB file in their own folder", *refused(lambda: audio.upload(f"{ua}/big.wav", b"RIFF" + bytes(12 * 1024 * 1024), {"content-type": "audio/wav"})))
+        check("patient A stores a web page in their own folder", *refused(lambda: audio.upload(f"{ua}/page.html", b"<script>alert(1)</script>", {"content-type": "text/html"})))
         if api:
             attack_api(api, {u: c.auth.get_session().access_token for u, c in ((ua, a), (ub, b), (uv, doctor))},
                        {ua: sess[ua], ub: sess[ub]}, {ua: "patient A", ub: "patient B"})

@@ -14,7 +14,8 @@ create table auth.users (
 create function auth.uid() returns uuid language sql stable as
 $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 
-create table storage.buckets (id text primary key, name text, public boolean default false);
+create table storage.buckets (id text primary key, name text, public boolean default false,
+                              file_size_limit bigint, allowed_mime_types text[]);   -- enforced by the Storage API, not by Postgres
 create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text, owner uuid);
 alter table storage.objects enable row level security;
 create function storage.foldername(name text) returns text[] language plpgsql as

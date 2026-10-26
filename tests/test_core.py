@@ -257,7 +257,7 @@ def test_api_has_no_duplicate_routes_or_functions():
 
 
 def test_no_cloud_tts_anywhere():
-    for f in [*(ROOT / "src").glob("*.py"), ROOT / "run_benchmark.py", ROOT / "requirements.txt"]:
+    for f in [*(ROOT / "src").glob("*.py"), *(ROOT / "scripts").glob("*.py"), ROOT / "requirements.txt"]:
         assert "edge_tts" not in f.read_text(encoding="utf-8") and "edge-tts" not in f.read_text(encoding="utf-8"), f.name
 
 
@@ -459,11 +459,11 @@ def test_password_accounts_cannot_skip_the_password():
 
 
 def test_no_undefined_names_in_project_code():
-    """Catches the NameError class of bug (a missing import) in code no test executes, e.g. run_benchmark.py."""
+    """Catches the NameError class of bug (a missing import) in code no test executes, e.g. the live scripts."""
     check = pytest.importorskip("pyflakes.api").check
     from pyflakes.reporter import Reporter
     import io
-    files = [*ROOT.glob("src/*.py"), *ROOT.glob("tests/*.py"), *ROOT.glob("scripts/*.py"), ROOT / "run_benchmark.py", ROOT / "test_api_e2e.py"]
+    files = [*ROOT.glob("src/*.py"), *ROOT.glob("tests/*.py"), *ROOT.glob("scripts/*.py")]
     problems = []
     for f in files:
         out = io.StringIO()

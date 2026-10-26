@@ -74,6 +74,8 @@ def main():
     api = parser.parse_args().api
     if not (URL and ANON and SERVICE) or ANON == SERVICE:
         sys.exit("Set SUPABASE_URL, SUPABASE_KEY (anon) and SUPABASE_SERVICE_ROLE_KEY in .env")
+    # variables already in the environment win over .env (VS Code's python.terminal.useEnvFile copies a stale .env into terminals)
+    print(f"attacking project {URL.split('//')[-1].split('.')[0]}\n")
     admin, users = create_client(URL, SERVICE), []
 
     def account():

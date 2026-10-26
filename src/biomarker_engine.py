@@ -247,7 +247,6 @@ def extract_speech_gym_biomarkers(audio, sample_rate=16000, model=None):
     }
 
 def main():
-    import soundfile as sf
     try:
         from src.data_ingestion import TorgoDataset
     except ModuleNotFoundError:

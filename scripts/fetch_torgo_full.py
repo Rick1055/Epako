@@ -19,7 +19,6 @@ import csv
 import hashlib
 import json
 import os
-import sys
 import tarfile
 import time
 import urllib.request

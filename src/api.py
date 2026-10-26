@@ -793,7 +793,6 @@ def create_clinical_pdf_report(
     report_data = {
         "session_id": session_id,
         "evaluation_date": time.strftime("%B %d, %Y"),
-        "clinic_name": "Epako Bio-Acoustic Speech Sanctuary",
         "patient": {
             "name": "De-identified",
             "id": sessions[0]["patient_id"],

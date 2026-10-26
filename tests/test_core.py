@@ -79,6 +79,24 @@ def test_biomarker_key_agrees_and_low_audio_is_none():
     assert pdf.startswith(b"%PDF")
 
 
+@pytest.mark.parametrize("bio", [{"articulation_velocity": 3.4, "pause_ratio": 0.3, "vocal_jitter_pct": 2.0, "vocal_shimmer_pct": 5.0},
+                                 {"articulation_velocity": 2.5, "pause_ratio": 0.4, "vocal_jitter_pct": 4.8, "vocal_shimmer_pct": 2.0}],
+                         ids=["mild", "severe"])
+def test_the_pdf_reports_measurements_against_references_without_diagnosing(monkeypatch, bio):
+    # unvalidated frame-level measures with uncited cut-offs must not print diagnoses or an invented clinic (2026-10-26)
+    from reportlab import rl_config
+    monkeypatch.setattr(rl_config, "pageCompression", 0)   # keep the PDF's text readable in its bytes
+    bio = {"speaking_rate": 2.0, "mean_f0_hz": 140.0, "stability_index": 70.0, "formant_compression_index": None, **bio}
+    pdf = generate_clinical_pdf({
+        "session_id": "S", "patient": {"name": "A", "id": "P", "condition": "c", "clinician": "D"},
+        "biomarkers": bio, "utterances": [{"original_text": "a", "repaired_text": "a", "latency_ms": 1.0}],
+        "slp_assessment": {"impression": "i", "home_plan": "h", "frequency": "f"}})
+    for invented in (b"Bradykinesia", b"Ataxic", b"Freezing", b"Tremor", b"Deficit", b"Hesitation", b"Perturbation",
+                     b"Sanctuary", b"Medical Record", b"Normative"):
+        assert invented not in pdf, invented
+    assert b"diagnosis" in pdf and b"frame-level" in pdf and b"Below reference" in pdf and b"Above reference" in pdf
+
+
 def test_failed_save_is_not_swallowed():
     from fastapi.testclient import TestClient
     import api

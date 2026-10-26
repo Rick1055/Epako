@@ -11,7 +11,7 @@ jobs:
           cache: pip
       - name: Install CPU torch (CI has no GPU), then the other pins
         run: |
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
           grep -v '^torch==' requirements.txt > ci-requirements.txt
           pip install -r ci-requirements.txt pytest pgserver psycopg2-binary pyflakes
       - run: python -m pytest tests -q

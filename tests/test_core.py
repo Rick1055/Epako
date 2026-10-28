@@ -385,6 +385,13 @@ def test_hit_maps_database_answers():
         with pytest.raises(api.HTTPException) as e:
             api.hit("n", "u", 5, 60)
         assert e.value.status_code == 503   # fails closed
+        import httpx
+        svc.rpc.return_value.execute.side_effect = [httpx.RemoteProtocolError("Server disconnected"), mock.Mock(data=True)]
+        api.hit("n", "u", 5, 60)   # one dropped connection is retried once
+        svc.rpc.return_value.execute.side_effect = httpx.RemoteProtocolError("Server disconnected")
+        with pytest.raises(api.HTTPException) as e:
+            api.hit("n", "u", 5, 60)
+        assert e.value.status_code == 503   # but not forever
 
 
 def test_delete_is_throttled_over_http():

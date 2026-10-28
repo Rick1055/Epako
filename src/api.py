@@ -242,8 +242,13 @@ def _reauth_ok(user, token, password, captcha_token=None) -> bool:
 
 def hit(name: str, user_id, limit: int, per: float = 60.0) -> None:
     """Per-user sliding-window limit kept in Postgres (rate_limit_hit), so it is shared by every worker and survives restarts."""
+    import httpx
+    call = lambda: service_client().rpc("rate_limit_hit", {"p_name": name, "p_user": str(user_id), "p_limit": limit, "p_seconds": int(per)}).execute().data
     try:
-        allowed = service_client().rpc("rate_limit_hit", {"p_name": name, "p_user": str(user_id), "p_limit": limit, "p_seconds": int(per)}).execute().data
+        try:
+            allowed = call()
+        except httpx.TransportError:   # a dropped connection ("Server disconnected"): one fresh try; at worst this request counts twice
+            allowed = call()
     except Exception as e:
         raise fail(503, "Rate limiter unavailable.", e)  # fail closed: if the database is down, auth is down too
     if not allowed:

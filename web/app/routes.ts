@@ -42,6 +42,7 @@ export default [
     route("clinician/sign-up", "routes/clinician-sign-up.tsx"),
     route("clinician/verify", "routes/clinician-verify.tsx"),
     route("clinician/pending", "routes/clinician-pending.tsx"),
+    route("clinician/two-step", "routes/clinician-two-step.tsx"),
     route("*", "routes/not-found.tsx"),
   ]),
 ] satisfies RouteConfig;

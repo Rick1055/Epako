@@ -102,7 +102,7 @@ components:
 
 # Design System: Epako Voice
 
-**Status:** being built in `web/`. Stages 1 to 3 of 5 are done (scaffold, page server, tokens, both themes, header, footer, phone menu, buttons, smooth-caret field, messages, 404, the persistent 3D garden, and the site-rules and garden tests). Stage 4 (2026-10-27): every screen in [Screens and features](#screens-and-features) exists and is connected to the API and Supabase: sign-up, sign-in, password reset, Setup, Home, Speak (phrase mode), Session summary, Voice, Progress and session detail, Care team, Me, Help, Terms, Privacy, Accessibility, and the clinician sign-up, verification, "we're checking", patient list, link code, patient and session screens with the assessment form and PDF. Not built yet: conversation mode (WebSocket), the Help contact form and its `POST /api/contact`, clinician two-step sign-in, and the 3D reactions marked below. The garden sounds, the stills for every stop, page entrance motion and Lenis scrolling are built. `epako_sylva_experience.html` is an unconnected mock whose wording and visuals are replaced by this document.
+**Status:** being built in `web/`. Stages 1 to 3 of 5 are done (scaffold, page server, tokens, both themes, header, footer, phone menu, buttons, smooth-caret field, messages, 404, the persistent 3D garden, and the site-rules and garden tests). Stage 4 (2026-10-27): every screen in [Screens and features](#screens-and-features) exists and is connected to the API and Supabase: sign-up, sign-in, password reset, Setup, Home, Speak (phrase mode), Session summary, Voice, Progress and session detail, Care team, Me, Help, Terms, Privacy, Accessibility, and the clinician sign-up, verification, "we're checking", patient list, link code, patient and session screens with the assessment form and PDF. Not built yet: conversation mode (WebSocket) and the Help contact form with its `POST /api/contact`. Clinician two-step sign-in is built (28 October: `/clinician/two-step`, an authenticator app, required by the database itself, and a 15-minute idle sign-out); so is the emailed sign-in link for patients (`/sign-in/link`). The garden sounds, the stills for every stop, page entrance motion and Lenis scrolling are built. `epako_sylva_experience.html` is an unconnected mock whose wording and visuals are replaced by this document.
 
 ## Redesign of 28 October 2026: light, fast, green and blue (this section overrides everything below it)
 
@@ -399,7 +399,7 @@ Sand-deep shapes that match the final layout. Longer waits use the loading trans
 
    Clinician: Welcome → Clinician sign-up (/clinician/sign-up)
         → Prove you're a licensed professional (/clinician/verify)
-        → Two-step sign-in set up (/clinician/security)
+        → Two-step sign-in set up (/clinician/two-step)
         → "We're checking" (/clinician/pending)  ← admin reviews, usually within 2 working days
         → Patients (/clinician) ── Enter link code (/clinician/link)
         → Patient (/clinician/patient/:id): sessions, measurements, assessment
@@ -489,7 +489,7 @@ Public, prerendered, one `h1` each, in the same warm voice as the rest.
 - **404:** as in Components.
 
 ### Clinician screens
-- **Sign up** (`/clinician/sign-up`): the same account screen as patients but with a clinician heading, then straight on to **verification** (`/clinician/verify`), **two-step sign-in** (`/clinician/security`) and **"We're checking"** (`/clinician/pending`). No access to any patient until verified. Full detail in [Clinician verification](#clinician-verification). (`clinicians` row, `verified=false`)
+- **Sign up** (`/clinician/sign-up`): the same account screen as patients but with a clinician heading, then straight on to **verification** (`/clinician/verify`), **two-step sign-in** (`/clinician/two-step`, asked for on the first visit to the clinician screens) and **"We're checking"** (`/clinician/pending`). No access to any patient until verified. Full detail in [Clinician verification](#clinician-verification). (`clinicians` row, `verified=false`)
 - **Patients** (`/clinician`): a list of linked patients, **pseudonymous** (e.g. "Patient 3f9a"; no names are stored anywhere), last session, sessions this week; **[Add a patient]** opens **Enter link code** (`redeem_link_code`; a wrong code gets one generic message, and 5 misses in 15 minutes locks the screen for a while, with the time stated).
 - **Patient** (`/clinician/patient/:id`): sessions list → session view with the **measurements table** (each value beside an approximate reference marked as approximate, compared as below / within / above; frame-level estimates labelled as such; composite scores marked "not compared"), the **what the recogniser heard vs what the patient confirmed** table, and the **assessment form** (condition in the clinician's words, impression, home practice, frequency; editable by its author). Always visible: *"Automated measurements, not clinically validated, not a diagnosis."*
 - **Report:** [Download PDF] per session (needs an assessment). Revoked access is shown as "no longer shared" and the data disappears from view.

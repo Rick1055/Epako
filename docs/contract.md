@@ -80,3 +80,12 @@ Owner of the logic: `src/vocabulary.py`; written only by `POST /api/sessions/{id
 5. Secrets (`.env`, service-role key) are never committed or sent to a client.
 6. The API is not the security boundary: clients hold the public anon key and can call Supabase directly, so every rule above must be enforced by row-level security and is attacked in `tests/test_rls.py` (e.g. an utterance must belong to a session of the same patient).
 7. Abuse limits: every authenticated route is rate-limited per user (`api.hit` / `rate_limit`, state in Postgres so it is shared by all workers and survives restarts; `tests/test_attacks.py` checks every route), each WebSocket utterance draws on the same `rectify` budget and one account may hold 2 sockets, audio is capped at 60 s and 8–192 kHz (anything undecodable is a 400), every request body is cut off at 20 MB as it arrives (110 MB for voice banking), whether or not it announces its size, the `patient_audio` bucket takes only `audio/*` files of at most 10 MB (clients upload there directly, past the API), voice banking at 10 notes of 120 s each, WebSocket chunks at 256 KB, WebSocket tokens are re-verified every 5 minutes, and error responses are generic (the real error is logged server-side). `/health` returns only `{"status": "online"}`.
+
+
+## Clinician two-step sessions (migration 20261102000000)
+
+A clinician reads a linked patient's `therapy_sessions`, `session_utterances` and `biomarker_logs`, and reads or writes
+`clinical_assessments`, only when their token says `aal = aal2` (they also entered an authenticator-app code;
+`public.is_two_step()`). A password-only clinician session gets empty results and refused writes. Patients are not
+affected. The web app asks for the code at `/clinician/two-step` before any clinician screen loads, and signs clinicians
+out after 15 idle minutes.

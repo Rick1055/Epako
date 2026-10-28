@@ -2,6 +2,7 @@
 Skipped unless `pgserver` and `psycopg2` are installed (pip install pgserver psycopg2-binary).
 Fidelity limit: auth.uid()/roles/storage are minimal stand-ins (tests/rls_bootstrap.sql), not Supabase itself."""
 import itertools
+import json
 import shutil
 import tempfile
 import uuid
@@ -25,13 +26,15 @@ class Db:
         self.conn = psycopg2.connect(**dsn)
         self.conn.autocommit = True
 
-    def q(self, role, uid, sql, params=()):
+    def q(self, role, uid, sql, params=(), aal="aal2"):
+        """`aal`: the session's assurance level (aal1 = password only, aal2 = with an authenticator code)."""
         cur = self.conn.cursor()
         try:
             cur.execute("reset role")
             if role:
                 cur.execute(f"set role {role}")
             cur.execute("select set_config('request.jwt.claim.sub', %s, false)", (uid or "",))
+            cur.execute("select set_config('request.jwt.claims', %s, false)", (json.dumps({"sub": uid, "aal": aal}) if uid else "",))
             cur.execute(sql, params)
             return cur.fetchall() if cur.description else cur.rowcount
         finally:
@@ -87,9 +90,9 @@ def link(db, clinician=DC, patient=PA):
     return code
 
 
-def denied(db, role, uid, sql, params=(), msg=""):
+def denied(db, role, uid, sql, params=(), msg="", aal="aal2"):
     with pytest.raises(psycopg2.Error) as e:
-        db.q(role, uid, sql, params)
+        db.q(role, uid, sql, params, aal=aal)
     assert msg in str(e.value)
 
 
@@ -219,6 +222,20 @@ def test_clinician_reads_only_granted_patient_and_never_writes(db):
            (db.sess[PA], db.pid[PA]), "permission denied")
     denied(db, "authenticated", DC, "update therapy_sessions set accuracy_rate = 100", msg="permission denied")
     assert db.q("authenticated", DC, "select user_id from patient_profiles") == [(DC,)]  # only their own (empty) profile
+
+
+def test_clinician_needs_a_two_step_session_for_patient_data(db):
+    """A password-only (aal1) clinician session reads none of a linked patient's data and writes no assessment."""
+    link(db)
+    ins = "insert into clinical_assessments(session_id, clinician_id, condition, impression, home_plan, frequency) values (%s, %s, 'c', 'i', 'h', 'f')"
+    db.q("authenticated", DC, ins, (db.sess[PA], DC))   # written from a two-step session
+    for t in ("therapy_sessions", "biomarker_logs", "session_utterances", "clinical_assessments"):
+        assert db.q("authenticated", DC, f"select * from {t}", aal="aal1") == [], t
+    denied(db, "authenticated", DC, ins, (db.sess[PA], DC), "row-level security", aal="aal1")
+    assert db.q("authenticated", DC, "update clinical_assessments set impression = 'x'", aal="aal1") == 0
+    # The patient's own data is theirs at any level.
+    assert len(db.q("authenticated", PA, "select * from therapy_sessions", aal="aal1")) == 1
+    assert len(db.q("authenticated", PA, "select * from clinical_assessments", aal="aal1")) == 1
 
 
 def test_unverifying_cuts_access_immediately(db):

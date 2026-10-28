@@ -13,6 +13,9 @@ create table auth.users (
 );
 create function auth.uid() returns uuid language sql stable as
 $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+-- The caller's token claims (Supabase sets request.jwt.claims); the tests set 'aal' to say one-step or two-step.
+create function auth.jwt() returns jsonb language sql stable as
+$$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
 
 create table storage.buckets (id text primary key, name text, public boolean default false,
                               file_size_limit bigint, allowed_mime_types text[]);   -- enforced by the Storage API, not by Postgres
@@ -22,7 +25,7 @@ create function storage.foldername(name text) returns text[] language plpgsql as
 $$ declare p text[]; begin p := string_to_array(name, '/'); return p[1:array_length(p, 1) - 1]; end $$;
 
 grant usage on schema public, auth, storage to anon, authenticated, service_role;
-grant execute on function auth.uid(), storage.foldername(text) to anon, authenticated, service_role;
+grant execute on function auth.uid(), auth.jwt(), storage.foldername(text) to anon, authenticated, service_role;
 grant all on storage.objects, storage.buckets to anon, authenticated, service_role;
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on functions to anon, authenticated, service_role;

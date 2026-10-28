@@ -80,6 +80,11 @@ export default function SignIn() {
   return (
     <EntryPage>
       <h1 className="text-headline text-balance">Welcome back. Good to see you.</h1>
+      {params.get("idle") && (
+        <div className="mt-4">
+          <Message tone="success">You were signed out after 15 quiet minutes, to keep patients' records safe. Sign in to carry on.</Message>
+        </div>
+      )}
       <div className="mt-8">
         {linkSent ? (
           <div className="flex flex-col gap-4">

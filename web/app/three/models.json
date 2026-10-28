@@ -1,0 +1,296 @@
+{
+  "snowdrop": [
+    {
+      "tris": 380,
+      "bytes": 5284
+    },
+    {
+      "tris": 170,
+      "bytes": 3948
+    },
+    {
+      "tris": 70,
+      "bytes": 3184
+    }
+  ],
+  "stone-c": [
+    {
+      "tris": 3999,
+      "bytes": 62756
+    },
+    {
+      "tris": 1499,
+      "bytes": 12820
+    },
+    {
+      "tris": 1135,
+      "bytes": 8556
+    }
+  ],
+  "hellebore-cream": [
+    {
+      "tris": 5999,
+      "bytes": 60084
+    },
+    {
+      "tris": 2400,
+      "bytes": 30768
+    },
+    {
+      "tris": 899,
+      "bytes": 15564
+    }
+  ],
+  "hellebore-plum": [
+    {
+      "tris": 5999,
+      "bytes": 60964
+    },
+    {
+      "tris": 2400,
+      "bytes": 30980
+    },
+    {
+      "tris": 899,
+      "bytes": 15668
+    }
+  ],
+  "cyclamen": [
+    {
+      "tris": 1708,
+      "bytes": 15388
+    },
+    {
+      "tris": 854,
+      "bytes": 10308
+    },
+    {
+      "tris": 341,
+      "bytes": 6508
+    }
+  ],
+  "rocks-a": [
+    {
+      "tris": 29997,
+      "bytes": 514500
+    },
+    {
+      "tris": 11996,
+      "bytes": 189456
+    },
+    {
+      "tris": 4200,
+      "bytes": 72976
+    }
+  ],
+  "ferns": [
+    {
+      "tris": 6232,
+      "bytes": 111740
+    },
+    {
+      "tris": 6232,
+      "bytes": 79964
+    },
+    {
+      "tris": 6232,
+      "bytes": 67724
+    }
+  ],
+  "stump": [
+    {
+      "tris": 8000,
+      "bytes": 782432
+    },
+    {
+      "tris": 2999,
+      "bytes": 248308
+    },
+    {
+      "tris": 1000,
+      "bytes": 73540
+    }
+  ],
+  "rocks-b": [
+    {
+      "tris": 34996,
+      "bytes": 658180
+    },
+    {
+      "tris": 13997,
+      "bytes": 238084
+    },
+    {
+      "tris": 4897,
+      "bytes": 88836
+    }
+  ],
+  "lamp": [
+    {
+      "tris": 6000,
+      "bytes": 258632
+    },
+    {
+      "tris": 2499,
+      "bytes": 92376
+    },
+    {
+      "tris": 899,
+      "bytes": 39296
+    }
+  ],
+  "celandine": [
+    {
+      "tris": 8966,
+      "bytes": 161552
+    },
+    {
+      "tris": 8966,
+      "bytes": 124356
+    },
+    {
+      "tris": 8966,
+      "bytes": 108568
+    }
+  ],
+  "tree": [
+    {
+      "tris": 75988,
+      "bytes": 1982916
+    },
+    {
+      "tris": 40004,
+      "bytes": 1113552
+    },
+    {
+      "tris": 18422,
+      "bytes": 500372
+    }
+  ],
+  "start-tree": [
+    {
+      "tris": 66978,
+      "bytes": 1765776
+    },
+    {
+      "tris": 33799,
+      "bytes": 970040
+    },
+    {
+      "tris": 14096,
+      "bytes": 403332
+    }
+  ],
+  "shrubs": [
+    {
+      "tris": 105496,
+      "bytes": 1811232
+    },
+    {
+      "tris": 47652,
+      "bytes": 909984
+    },
+    {
+      "tris": 17348,
+      "bytes": 383704
+    }
+  ],
+  "picnic-table": [
+    {
+      "tris": 6000,
+      "bytes": 544996
+    },
+    {
+      "tris": 2500,
+      "bytes": 155396
+    },
+    {
+      "tris": 900,
+      "bytes": 57652
+    }
+  ],
+  "visitor-a": [
+    {
+      "tris": 8994,
+      "bytes": 185812
+    },
+    {
+      "tris": 3494,
+      "bytes": 74740
+    },
+    {
+      "tris": 1195,
+      "bytes": 35940
+    }
+  ],
+  "visitor-b": [
+    {
+      "tris": 8994,
+      "bytes": 193060
+    },
+    {
+      "tris": 3496,
+      "bytes": 83752
+    },
+    {
+      "tris": 1195,
+      "bytes": 39932
+    }
+  ],
+  "visitor-c": [
+    {
+      "tris": 8997,
+      "bytes": 190160
+    },
+    {
+      "tris": 3495,
+      "bytes": 79820
+    },
+    {
+      "tris": 1196,
+      "bytes": 37584
+    }
+  ],
+  "visitor-d": [
+    {
+      "tris": 8995,
+      "bytes": 173288
+    },
+    {
+      "tris": 3496,
+      "bytes": 72256
+    },
+    {
+      "tris": 1195,
+      "bytes": 35292
+    }
+  ],
+  "visitor-e": [
+    {
+      "tris": 8997,
+      "bytes": 191516
+    },
+    {
+      "tris": 3498,
+      "bytes": 78964
+    },
+    {
+      "tris": 1197,
+      "bytes": 37476
+    }
+  ],
+  "visitor-f": [
+    {
+      "tris": 8997,
+      "bytes": 200124
+    },
+    {
+      "tris": 3497,
+      "bytes": 87436
+    },
+    {
+      "tris": 1198,
+      "bytes": 40976
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+garden.ogg: a 90-second loop mixed for Epako Voice from public-domain and CC0 recordings on Wikimedia Commons:
+- "Gentle breeze and birds singing.ogg" (public domain) https://commons.wikimedia.org/wiki/File:Gentle_breeze_and_birds_singing.ogg
+- "Birds singing in garden.ogg" (public domain) https://commons.wikimedia.org/wiki/File:Birds_singing_in_garden.ogg
+- "Robin's song ZS V78-0033.wav" (CC0 1.0) https://commons.wikimedia.org/wiki/File:Robin%27s_song_ZS_V78-0033.wav

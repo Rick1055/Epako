@@ -1,0 +1,57 @@
+{
+  "tree-card": [
+    {
+      "file": "impostor-tree-card-front.webp",
+      "view": "front",
+      "width": 4.947714673820883,
+      "height": 5.22854471206665,
+      "kb": 249
+    },
+    {
+      "file": "impostor-tree-card-side.webp",
+      "view": "side",
+      "width": 5.008986682165414,
+      "height": 5.22854471206665,
+      "kb": 230
+    }
+  ],
+  "fir-card": [
+    {
+      "file": "impostor-fir-card-front-0.webp",
+      "view": "front",
+      "width": 4.995794594754263,
+      "height": 9.245229515111502,
+      "kb": 117
+    },
+    {
+      "file": "impostor-fir-card-front-1.webp",
+      "view": "front",
+      "width": 4.273511038886176,
+      "height": 9.245229515111502,
+      "kb": 72
+    },
+    {
+      "file": "impostor-fir-card-front-2.webp",
+      "view": "front",
+      "width": 4.321663275944049,
+      "height": 9.245229515111502,
+      "kb": 62
+    }
+  ],
+  "tree-card-b": [
+    {
+      "file": "impostor-tree-card-b-front.webp",
+      "view": "front",
+      "width": 4.3760552406311035,
+      "height": 3.542356178977273,
+      "kb": 252
+    },
+    {
+      "file": "impostor-tree-card-b-side.webp",
+      "view": "side",
+      "width": 4.233525276184082,
+      "height": 3.541772780075572,
+      "kb": 269
+    }
+  ]
+}

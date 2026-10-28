@@ -1,0 +1,50 @@
+/*
+  Design tokens (DESIGN.md, Colors). The only file allowed to contain colour values.
+  Each colour is light-dark(<morning>, <evening>): the theme is picked by color-scheme,
+  which follows the device unless <html data-theme> pins it (set from the theme cookie on the server).
+  scripts/check-contrast.mjs reads this file and fails the build if a pair drops below WCAG.
+*/
+:root {
+  color-scheme: light dark;
+
+  --bg: light-dark(#F8F4EC, #12262A);
+  --bg-deep: light-dark(#EFEAE0, #0D1D20);
+  --surface: light-dark(#FFFFFF, #1B3439);
+  --raised: light-dark(#DCEEE8, #24434A);
+  --card-line: light-dark(#FFFFFF, #35575E);
+
+  --ink: light-dark(#1F2E30, #F1EBDD);
+  --ink-soft: light-dark(#3E5053, #B8C6C3);
+  --link: light-dark(#1D5A5E, #8CC5B8);
+  --edge: light-dark(#6A7E80, #7F9B99);
+  --focus: light-dark(#1D5A5E, #8CC5B8);
+
+  --primary: light-dark(#E89A7B, #E89A7B);
+  --primary-press: light-dark(#D9805F, #D9805F);
+  --primary-ink: light-dark(#1F2E30, #12262A);
+  --primary-edge: light-dark(#A45A3F, #E89A7B);
+
+  --secondary: light-dark(#2F7F83, #8CC5B8);
+  --secondary-press: light-dark(#236468, #A6D3C8);
+  --secondary-ink: light-dark(#FFFFFF, #12262A);
+
+  --fill: light-dark(#2F7F83, #8CC5B8);
+  --track: light-dark(#EFEAE0, #24434A);
+  /* Chart bars (one series): a richer teal than --fill, validated for chroma and contrast on --surface (dataviz). */
+  --chart: light-dark(#00897B, #2A9D8F);
+  --error: light-dark(#B5473A, #F0907F);
+  --warning: light-dark(#7A5200, #E8C27A);
+
+  --shadow-color: light-dark(rgb(31 46 48 / 0.14), rgb(0 0 0 / 0.45));
+  --scrim: light-dark(rgb(31 46 48 / 0.45), rgb(0 0 0 / 0.6));
+  /* The garden's sky (three/palette.ts), shown in its area until the picture or the live scene arrives. Decorative. */
+  --garden-sky: light-dark(#BCD6DC, #1C3640);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}

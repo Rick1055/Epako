@@ -1,0 +1,297 @@
+@import "tailwindcss";
+@import "@fontsource-variable/atkinson-hyperlegible-next";
+@import "./styles/tokens.css";
+@import "lenis/dist/lenis.css";
+
+/* Evening look: pinned by <html data-theme="dark">, or the device's setting when nothing is pinned. */
+@custom-variant dark {
+  &:where([data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
+/* Tailwind reads the tokens; its default palette is removed so no colour can bypass them (rule 46). */
+@theme inline {
+  --color-*: initial;
+  --color-bg: var(--bg);
+  --color-bg-deep: var(--bg-deep);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-card-line: var(--card-line);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-link: var(--link);
+  --color-edge: var(--edge);
+  --color-focus: var(--focus);
+  --color-primary: var(--primary);
+  --color-primary-press: var(--primary-press);
+  --color-primary-ink: var(--primary-ink);
+  --color-primary-edge: var(--primary-edge);
+  --color-secondary: var(--secondary);
+  --color-secondary-press: var(--secondary-press);
+  --color-secondary-ink: var(--secondary-ink);
+  --color-fill: var(--fill);
+  --color-track: var(--track);
+  --color-chart: var(--chart);
+  --color-error: var(--error);
+  --color-warning: var(--warning);
+  --color-scrim: var(--scrim);
+}
+
+@theme {
+  --font-sans: "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
+
+  --text-display: clamp(2.25rem, 5vw, 3.5rem);
+  --text-display--line-height: 1.1;
+  --text-display--letter-spacing: -0.01em;
+  --text-display--font-weight: 600;
+  --text-headline: clamp(1.5rem, 3vw, 2rem);
+  --text-headline--line-height: 1.2;
+  --text-headline--font-weight: 600;
+  --text-title: 1.25rem;
+  --text-title--line-height: 1.3;
+  --text-title--font-weight: 600;
+  --text-body: 1.125rem;
+  --text-body--line-height: 1.6;
+  --text-label: 1rem;
+  --text-label--line-height: 1.3;
+  --text-label--font-weight: 600;
+
+  --radius-input: 12px;
+  --radius-card: 20px;
+
+  --breakpoint-*: initial;
+  --breakpoint-sm: 30rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 60rem;
+  --breakpoint-xl: 80rem;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  --shadow-float: 0 8px 24px var(--shadow-color);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    min-height: 100dvh;
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: break-word;
+  }
+
+  a {
+    color: var(--link);
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--raised);
+    color: var(--ink);
+  }
+
+  /* Inputs under 16px make iPhones zoom the page (rule 2). */
+  input,
+  select,
+  textarea {
+    font-size: max(1em, 16px);
+  }
+
+  /* Browser autofill keeps our colours instead of its own yellow or blue. */
+  input:autofill {
+    box-shadow: 0 0 0 100px var(--surface) inset;
+    -webkit-text-fill-color: var(--ink);
+    caret-color: var(--ink);
+  }
+}
+
+/* The theme switch cross-fades (View Transitions, where the browser has them; skipped under reduced motion in JS). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 250ms;
+}
+
+/*
+  The garden covers the whole screen behind every page, with no frame (its sky is the page colour). Where the
+  words are it lies under a light mist (--faint of its strength); elsewhere it is vivid (--vivid, which the
+  host lowers as the person scrolls into a long page). Phones: vivid in a band below the header (13-32% of the height; the header itself stays misted). Wide screens: vivid on the
+  right, misted on the left where the words are and under the header. The same breakpoint as Scene.tsx's frame().
+*/
+.garden-layer {
+  position: fixed;
+  inset: 0;
+  --vivid: 1;
+  --faint: 0.1;
+  -webkit-mask-image: linear-gradient(to bottom, rgb(0 0 0 / var(--faint)) 0%, rgb(0 0 0 / var(--faint)) 9%, rgb(0 0 0 / var(--vivid)) 13%, rgb(0 0 0 / var(--vivid)) 32%, rgb(0 0 0 / var(--faint)) 40%);
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / var(--faint)) 0%, rgb(0 0 0 / var(--faint)) 9%, rgb(0 0 0 / var(--vivid)) 13%, rgb(0 0 0 / var(--vivid)) 32%, rgb(0 0 0 / var(--faint)) 40%);
+}
+
+@media (min-width: 60rem) and (min-aspect-ratio: 23/20) {
+  /* Misted on the left where the words are, and in a band under the header so its links stay readable. */
+  .garden-layer {
+    --mist-from: 52%;
+    --mist-to: 72%;
+    -webkit-mask-image:
+      linear-gradient(to right, rgb(0 0 0 / var(--faint)) 0%, rgb(0 0 0 / var(--faint)) var(--mist-from), rgb(0 0 0 / var(--vivid)) var(--mist-to)),
+      linear-gradient(to bottom, rgb(0 0 0 / var(--faint)) 0, rgb(0 0 0 / var(--faint)) 4.5rem, #000 9rem);
+    mask-image:
+      linear-gradient(to right, rgb(0 0 0 / var(--faint)) 0%, rgb(0 0 0 / var(--faint)) var(--mist-from), rgb(0 0 0 / var(--vivid)) var(--mist-to)),
+      linear-gradient(to bottom, rgb(0 0 0 / var(--faint)) 0, rgb(0 0 0 / var(--faint)) 4.5rem, #000 9rem);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
+  /* Signed-in pages: the left rail moves the words right, so the mist reaches a little further. */
+  :root:has(.app-rail) .garden-layer {
+    --mist-from: 56%;
+    --mist-to: 76%;
+  }
+}
+
+/* Morning: the pale page colour at 90% read as a harsh white wash over the left, so more of the garden shows through
+   there: 22%, the most at which every link still clears 4.5:1 (tests/garden.spec.ts measures the real pixels; 30%
+   left "I'm a clinician" at 4.2:1). Evening keeps 10%. */
+:root[data-theme="light"] .garden-layer {
+  --faint: 0.22;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .garden-layer {
+    --faint: 0.22;
+  }
+}
+
+/* The still picture steps aside once the live garden is showing (GardenHost). */
+#garden-still[data-live] {
+  visibility: hidden;
+}
+
+/* Clinician screens are work screens: the garden is only a small corner, top right (DESIGN.md, the stops). */
+:root:has(.work-screen) .garden-layer,
+:root:has(.work-screen) #garden-still {
+  -webkit-mask-image: radial-gradient(ellipse 40% 45% at 100% 0%, rgb(0 0 0 / 0.9), rgb(0 0 0 / 0.06) 100%);
+  mask-image: radial-gradient(ellipse 40% 45% at 100% 0%, rgb(0 0 0 / 0.9), rgb(0 0 0 / 0.06) 100%);
+}
+
+/* Sheets (components/MobileMenu.tsx): slide in under 200ms, page behind doesn't scroll. */
+dialog.sheet[open] {
+  animation: sheet-in 180ms var(--ease-out);
+}
+
+@keyframes sheet-in {
+  from {
+    translate: 100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog.sheet[open] {
+    animation: none;
+  }
+}
+
+html:has(dialog[open]) {
+  overflow: hidden;
+}
+
+/* Smooth caret (components/TextField.tsx): glides between positions, blinks softly when idle. */
+.smooth-caret {
+  transition: translate 90ms var(--ease-out);
+  animation: caret-blink 1.1s ease-in-out 0.5s infinite alternate;
+}
+
+@keyframes caret-blink {
+  to {
+    opacity: 0.15;
+  }
+}
+
+/* Record button (components/RecordButton.tsx): breathes when idle, a slow arc while working, bars while speaking. */
+.record-idle {
+  animation: record-breathe 3.5s ease-in-out infinite alternate;
+}
+
+@keyframes record-breathe {
+  to {
+    scale: 1.03;
+  }
+}
+
+.record-arc {
+  animation: record-turn 1.6s linear infinite;
+}
+
+@keyframes record-turn {
+  to {
+    rotate: 1turn;
+  }
+}
+
+.record-bar {
+  animation: record-bar 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes record-bar {
+  from {
+    scale: 1 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .record-idle,
+  .record-bar {
+    animation: none;
+  }
+  .record-arc {
+    animation-duration: 4s;
+  }
+}
+
+/* Help and the legal pages (components/Prose.tsx): lists and links read as part of the text. */
+.prose-page ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.prose-page a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Page changes (DESIGN.md, transitions): the new page's content rises into place while the garden walks behind it. */
+.page-in {
+  animation: page-in 320ms var(--ease-out) both;
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-in {
+    animation: none;
+  }
+}

@@ -1,0 +1,17 @@
+.DS_Store
+.env
+/node_modules/
+
+# Asset pipeline working files (sources and Blender output; the finished models are in public/models)
+/.cache/
+
+# Playwright
+/test-results/
+/playwright-report/
+
+# React Router
+/.react-router/
+/build/
+
+# Local logs
+debug.log

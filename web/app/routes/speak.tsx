@@ -19,8 +19,23 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function clientLoader() {
-  const [profile, { sessions, utterances }] = await Promise.all([myProfile(), practice(1)]);
-  return { consent: profile.consent_audio_storage, today: byDay(sessions, utterances, 1)[0].phrases };
+  const [profile, { sessions, utterances }] = await Promise.all([myProfile(), practice(60)]);
+  return { consent: profile.consent_audio_storage, today: byDay(sessions, utterances, 1)[0].phrases, usual: usualPhrases(utterances) };
+}
+
+/** The person's own most-said phrases (last 60 days): when a phrase comes out wrong, one tap picks what they meant. */
+function usualPhrases(utterances: { corrected_text: string | null }[]) {
+  // Grouped ignoring case and punctuation ("walk." and "walk" are one phrase); shown as most recently said.
+  const groups = new Map<string, { text: string; n: number }>();
+  for (const u of utterances) {
+    const text = u.corrected_text?.trim();
+    if (!text || text.length > 80) continue;
+    const key = text.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, "").replace(/\s+/g, " ").trim();
+    const g = groups.get(key);
+    if (g) g.n++;
+    else groups.set(key, { text, n: 1 });
+  }
+  return [...groups.values()].sort((a, b) => b.n - a.n).slice(0, 6).map((g) => g.text);
 }
 
 type Result = { raw_transcript: string; repaired_text: string; rectified_audio: string | null; voice_error: string | null; latency_ms: number };
@@ -45,7 +60,7 @@ const MIC_HELP = {
 };
 
 export default function Speak() {
-  const { consent, today } = useLoaderData<typeof clientLoader>();
+  const { consent, today, usual } = useLoaderData<typeof clientLoader>();
   const navigate = useNavigate();
   const [state, setState] = useState<RecordState>("idle");
   const [notice, setNotice] = useState("");
@@ -238,7 +253,29 @@ export default function Speak() {
                     if (fixed.trim()) void confirm(fixed.trim());
                   }}
                 >
-                  <TextField label="What did you mean?" hint="Fix the words, then send. Each fix teaches me your way of speaking." value={fixed} onChange={(e) => setFixed(e.target.value)} maxLength={500} autoFocus />
+                  {/* Pick before typing: typing is hard for many people this app is for. */}
+                  {usual.filter((t) => t !== result.repaired_text).length > 0 && (
+                    <fieldset>
+                      <legend className="font-semibold">Did you mean one of your usual phrases?</legend>
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                        {usual
+                          .filter((t) => t !== result.repaired_text)
+                          .map((t) => (
+                            <Button key={t} variant="secondary" className="justify-start text-left" onClick={() => confirm(t)}>
+                              {t}
+                            </Button>
+                          ))}
+                      </div>
+                    </fieldset>
+                  )}
+                  <TextField
+                    label={usual.length ? "Or fix the words yourself" : "What did you mean?"}
+                    hint="Fix the words, then send. Each fix teaches me your way of speaking."
+                    value={fixed}
+                    onChange={(e) => setFixed(e.target.value)}
+                    maxLength={500}
+                    autoFocus={!usual.length}
+                  />
                   <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                     <Button type="submit" variant="secondary">
                       Send

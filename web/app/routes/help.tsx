@@ -37,7 +37,8 @@ const FAQ: { q: string; a: React.ReactNode }[] = [
     a: (
       <p>
         Try a little closer to the microphone, somewhere quiet. When it gets a word wrong, press "Not quite" and type what you meant: each
-        fix teaches it your way of speaking, so it gets better the more you use it.
+        fix teaches it your way of speaking. It learns fastest on the phrases you say often, like greetings and everyday
+        requests; brand-new words take longer.
       </p>
     ),
   },

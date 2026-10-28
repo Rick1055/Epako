@@ -72,6 +72,21 @@ export async function myProfile(): Promise<Profile> {
   return data;
 }
 
+/**
+ * What the app has learned about how this person speaks (docs/contract.md): word fixes it now applies by itself (the
+ * same rule as FeedbackEngine.apply: confirmed at least twice, and right at least 60% of the time), and the words of
+ * theirs it knows well (said twice or more), which it can recognise more readily when the recogniser is unsure.
+ */
+export async function learned() {
+  const { data, error } = await supabase().from("patient_profiles").select("phonetic_corrections, vocabulary").eq("user_id", await myId()).single();
+  if (error) throw error;
+  const fixes = Object.values((data.phonetic_corrections ?? {}) as Record<string, { ok: number; bad: number }>).filter(
+    (r) => r.ok >= 2 && r.ok / (r.ok + r.bad) >= 0.6,
+  ).length;
+  const words = Object.values((data.vocabulary ?? {}) as Record<string, number>).filter((n) => n >= 2).length;
+  return { fixes, words };
+}
+
 export async function saveConsent(on: boolean) {
   const { error } = await supabase()
     .from("patient_profiles")

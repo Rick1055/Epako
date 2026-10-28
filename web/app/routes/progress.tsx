@@ -5,6 +5,7 @@ import { DayBars } from "~/components/DayBars";
 import { StatTile } from "~/components/StatTile";
 import { PageIntro } from "~/components/PageIntro";
 import { Icon } from "~/components/Icon";
+import { learned } from "~/lib/patient";
 import { byDay, practice } from "~/lib/progress";
 import type { Route } from "./+types/progress";
 
@@ -13,10 +14,11 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function clientLoader() {
-  const { sessions, utterances } = await practice(28);
+  const [{ sessions, utterances }, known] = await Promise.all([practice(28), learned().catch(() => null)]);
   return {
     days: byDay(sessions, utterances, 28),
     sessions: sessions.filter((s) => s.utterances_count),
+    known,
   };
 }
 
@@ -28,7 +30,7 @@ function summary(days: { phrases: number }[], span: string) {
 }
 
 export default function Progress() {
-  const { days, sessions } = useLoaderData<typeof clientLoader>();
+  const { days, sessions, known } = useLoaderData<typeof clientLoader>();
   const [span, setSpan] = useState<7 | 28>(7);
   const shown = days.slice(-span);
   const spanWords = span === 7 ? "this week" : "in the last four weeks";
@@ -84,6 +86,23 @@ export default function Progress() {
               />
             </div>
           </section>
+
+          {known && (
+            <section aria-labelledby="learned-title" className="rounded-card bg-surface p-6">
+              <h2 id="learned-title" className="text-title">
+                What I've learned about your speech
+              </h2>
+              <dl className="mt-4 grid grid-cols-2 gap-4">
+                <StatTile label="Words I now fix for you" value={known.fixes} />
+                <StatTile label="Your words I know well" value={known.words} />
+              </dl>
+              <p className="mt-4 text-ink-soft">
+                {known.fixes + known.words === 0
+                  ? "Each time you say yes, or fix a word, I learn a little more about how you speak."
+                  : "The phrases you say often are the ones I learn fastest. Each yes and each fix helps."}
+              </p>
+            </section>
+          )}
 
           <section aria-labelledby="sessions-title">
             <h2 id="sessions-title" className="text-title">

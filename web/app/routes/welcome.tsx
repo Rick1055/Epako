@@ -12,6 +12,20 @@ export function meta({}: Route.MetaArgs) {
       content:
         "Epako Voice listens, tidies up what you said, and says it back in a voice you choose. A gentle helper for everyday speaking and practice.",
     },
+    // Structured data (DESIGN.md, rule 28): only facts shown on the page; no ratings, reviews or medical claims.
+    {
+      "script:ld+json": {
+        "@context": "https://schema.org",
+        "@graph": [
+          { "@type": "Organization", name: "Epako Voice" },
+          {
+            "@type": "WebSite",
+            name: "Epako Voice",
+            description: "A helper for everyday speaking and practice for people with dysarthria. It isn't a medical device.",
+          },
+        ],
+      },
+    },
   ];
 }
 

@@ -336,3 +336,26 @@ def test_verification_changes_are_audited(db):
     assert rows[0][2] == DC and all(r[2] for r in rows)                                     # who did it is recorded
     denied(db, "authenticated", DC, "select * from clinician_audit", msg="permission denied")
     denied(db, "authenticated", DC, "delete from clinician_audit", msg="permission denied")
+
+
+def test_contact_messages_are_server_only(db):
+    db.q(None, None, "insert into contact_messages(topic, email, message) values ('other', 'a@b.co', 'hi')")
+    for role, uid in (("anon", None), ("authenticated", PA), ("authenticated", DC)):
+        denied(db, role, uid, "select * from contact_messages", msg="permission denied")
+        denied(db, role, uid, "insert into contact_messages(topic, email, message) values ('other', 'a@b.co', 'x')", msg="permission denied")
+    denied(db, None, None, "insert into contact_messages(topic, email, message) values ('sales', 'a@b.co', 'x')", msg="violates check")
+
+
+def test_consent_changes_are_recorded_and_only_readable_by_the_patient(db):
+    on = "update patient_profiles set consent_audio_storage = %s, consent_updated_at = now() where user_id = %s"
+    db.q("authenticated", PA, on, (True, PA))
+    db.q("authenticated", PA, on, (False, PA))
+    db.q("authenticated", PA, on, (False, PA))   # saving the same choice again is not a new event
+    events = db.q("authenticated", PA, "select purpose, granted, notice_version from consent_events order by id")
+    assert [e[:2] for e in events] == [("keep_recordings", True), ("keep_recordings", False)]
+    assert all(e[2] == "2026-10-28" for e in events)
+    assert db.q("authenticated", PB, "select * from consent_events") == []          # another patient sees none
+    assert db.q("authenticated", DC, "select * from consent_events") == []          # nor does a clinician
+    denied(db, "authenticated", PA, "insert into consent_events(user_id, purpose, granted, notice_version) values (%s, 'keep_recordings', true, 'x')", (PA,), "permission denied")
+    denied(db, "authenticated", PA, "delete from consent_events", msg="permission denied")
+    denied(db, "authenticated", PA, "update consent_events set granted = true", msg="permission denied")

@@ -102,11 +102,34 @@ export default function Privacy() {
         </p>
       </Section>
 
+      <Section title="How long things are kept">
+        <ul>
+          <li>Your account, sessions, phrases, measurements, voice settings and what the app has learned: until you delete them.</li>
+          <li>Recordings: only if you chose to keep them, and only until you turn that off and delete them, or delete your account.</li>
+          <li>A record of each time you said yes or no to keeping recordings, with the date and the version of this notice: for as long as your account exists, so we can show what you agreed to.</li>
+          <li>Messages sent through the Help page: 12 months, then deleted automatically.</li>
+        </ul>
+      </Section>
+
+      <Section title="Your rights under India's data protection law">
+        <p>
+          Under the Digital Personal Data Protection Act, 2023, you can ask what we hold about you, have it corrected or
+          completed, have it erased, withdraw your consent at any time (as easily as you gave it), and name someone to act
+          for you if you can't. Most of this you can do yourself in <Link to="/me">Me</Link>; for the rest, write to us.
+        </p>
+        <p>
+          <strong>Grievance contact:</strong> write to <a href={`mailto:${contact.email}`}>{contact.email}</a> with the subject "Grievance". We'll
+          acknowledge it and tell you how and when it will be resolved. If you're not satisfied, you can complain to the Data Protection Board of India.
+        </p>
+        {contact.isDemo && <p className="text-ink-soft">This is a demo version: the address above is a sample, and a named grievance officer will be listed before launch.</p>}
+      </Section>
+
       <Section title="Questions">
         <p>
           Ask us any time: <a href={`mailto:${contact.email}`}>{contact.email}</a> or <a href={contact.phoneHref}>{contact.phone}</a>. See also{" "}
           <Link to="/help">Help</Link> and the <Link to="/terms">terms</Link>.
         </p>
+        <p className="text-ink-soft">This notice: version of 28 October 2026.</p>
       </Section>
     </ProsePage>
   );

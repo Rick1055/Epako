@@ -89,3 +89,17 @@ A clinician reads a linked patient's `therapy_sessions`, `session_utterances` an
 `public.is_two_step()`). A password-only clinician session gets empty results and refused writes. Patients are not
 affected. The web app asks for the code at `/clinician/two-step` before any clinician screen loads, and signs clinicians
 out after 15 idle minutes.
+
+
+## Contact messages and consent history (migrations 20261103000000, 20261104000000)
+
+`POST /api/contact` (no sign-in): `{topic: sign-in|voice|data|clinician|other, name?, email, message (1..4000),
+captcha_token, website}` → `{saved, emailed}`. `website` is a honeypot (filled = pretend success, nothing kept).
+The CAPTCHA is verified on the server with `TURNSTILE_SECRET_KEY` (missing: 503, the form refuses); limits: 5 an hour
+per network, 3 an hour per address. Saved to `contact_messages` (service key only; no client access), purged after
+12 months (`purge_old_contact_messages()`, run before each insert); emailed when `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_USER`, `SMTP_PASSWORD` and `CONTACT_TO` are set (`emailed: false` otherwise, and the page says so).
+
+`consent_events`: one row each time `patient_profiles.consent_audio_storage` changes (written by a trigger, with
+`privacy_notice_version()`), readable only by that patient, never written or deleted by a client; removed with the
+account.

@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 
 import { Icon } from "~/components/Icon";
+import { ContactForm } from "~/components/ContactForm";
 import { ProsePage, Section } from "~/components/Prose";
 import { contact } from "~/lib/site";
 import type { Route } from "./+types/help";
@@ -113,9 +114,10 @@ export default function Help() {
       </div>
 
       <Section title="Get in touch">
+        <p>Write to us here, or email <a href={`mailto:${contact.email}`}>{contact.email}</a>.</p>
+        <ContactForm />
         <p>
-          Email <a href={`mailto:${contact.email}`}>{contact.email}</a> or call <a href={contact.phoneHref}>{contact.phone}</a>. Please don't
-          include medical details.
+          If speaking on the phone is easier for someone helping you, call <a href={contact.phoneHref}>{contact.phone}</a>.
         </p>
         <p>This isn't an emergency service. In an emergency, call your local emergency number.</p>
         {contact.isDemo && (

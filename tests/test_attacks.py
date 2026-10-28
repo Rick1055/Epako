@@ -13,7 +13,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import api
 
-HTTP_ROUTES = [(m, r.path) for r in api.app.routes if isinstance(r, APIRoute) for m in r.methods if r.path != "/health"]
+# The only routes open without a sign-in: the health check, and the Help page's contact form (guarded instead by the
+# CAPTCHA checked on the server, a honeypot and per-address limits: test_core.py, test_contact_form_*).
+PUBLIC = {"/health", "/api/contact"}
+HTTP_ROUTES = [(m, r.path) for r in api.app.routes if isinstance(r, APIRoute) for m in r.methods if r.path not in PUBLIC]
 SID = str(uuid.uuid4())
 
 

@@ -870,6 +870,98 @@ def create_clinical_pdf_report(
 #    warm: the patient waits median 772 ms, p90 1190 ms; ~480 ms of it is the sign-in check and rate limit, two ~220 ms
 #    database round trips; ASR median ~140 ms. On battery the GPU is up to 10x slower)
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Contact form (DESIGN.md, rule 45): no sign-in needed, so it is guarded by the CAPTCHA (verified here, on the
+# server), a hidden honeypot field, length limits, and limits per sender address and per network.
+# ---------------------------------------------------------------------------
+CONTACT_TOPICS = ("sign-in", "voice", "data", "clinician", "other")
+_EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
+
+
+class ContactIn(BaseModel):
+    topic: str
+    name: Optional[str] = Field(default=None, max_length=100)
+    email: str = Field(max_length=254)
+    message: str = Field(min_length=1, max_length=4000)
+    captcha_token: str = Field(default="", max_length=4096)
+    website: str = Field(default="", max_length=200)   # the honeypot: hidden from people, filled in by bots
+
+    @field_validator("topic")
+    @classmethod
+    def _topic(cls, v):
+        if v not in CONTACT_TOPICS:
+            raise ValueError("unknown topic")
+        return v
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v):
+        v = v.strip()
+        if not _EMAIL_RE.match(v):
+            raise ValueError("not an email address")
+        return v
+
+
+def _captcha_ok(token: str, ip: str) -> bool:
+    """Cloudflare Turnstile's server check. Without TURNSTILE_SECRET_KEY the form can't be protected, so it refuses."""
+    import httpx
+    secret = os.getenv("TURNSTILE_SECRET_KEY")
+    if not secret:
+        raise HTTPException(status_code=503, detail="The contact form isn't switched on yet. Please email us instead.")
+    r = httpx.post("https://challenges.cloudflare.com/turnstile/v0/siteverify", data={"secret": secret, "response": token, "remoteip": ip}, timeout=10)
+    return bool(r.json().get("success"))
+
+
+def _send_contact_email(msg: dict) -> bool:
+    """Sends the message to the team inbox over SMTP (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, CONTACT_TO).
+    False when mail isn't set up or the server refused it; the message is saved either way."""
+    import smtplib
+    from email.message import EmailMessage
+    host, to = os.getenv("SMTP_HOST"), os.getenv("CONTACT_TO")
+    if not host or not to:
+        return False
+    m = EmailMessage()
+    m["Subject"] = f"[Epako Voice] {msg['topic']}: message from {msg['email']}"
+    m["From"] = os.getenv("SMTP_USER") or to
+    m["To"] = to
+    m["Reply-To"] = msg["email"]
+    m.set_content(f"Topic: {msg['topic']}\nName: {msg.get('name') or '(not given)'}\nEmail: {msg['email']}\n\n{msg['message']}\n")
+    try:
+        with smtplib.SMTP(host, int(os.getenv("SMTP_PORT", "587")), timeout=15) as smtp:
+            smtp.starttls()
+            if os.getenv("SMTP_USER"):
+                smtp.login(os.getenv("SMTP_USER"), os.getenv("SMTP_PASSWORD", ""))
+            smtp.send_message(m)
+        return True
+    except Exception as e:
+        print(f"[!] Contact email not sent: {e}")
+        return False
+
+
+@app.post("/api/contact")
+async def contact(req: ContactIn, request: Request):
+    from uuid import NAMESPACE_URL, uuid5
+    if req.website:   # a bot filled in the hidden field: answer as if all went well, keep nothing
+        return {"saved": True, "emailed": True}
+    # The page server is the only way in and adds the address it saw last; anything before it, a sender could forge.
+    ip = (request.headers.get("x-forwarded-for") or "").split(",")[-1].strip() or (request.client.host if request.client else "")
+    for name, key, limit in (("contact_ip", ip, 5), ("contact_email", req.email.lower(), 3)):
+        await asyncio.to_thread(hit, name, uuid5(NAMESPACE_URL, f"{name}:{key}"), limit, 3600)
+    if not await asyncio.to_thread(_captcha_ok, req.captcha_token, ip):
+        raise HTTPException(status_code=403, detail="The quick check didn't go through. Please try it again.")
+    row = {"topic": req.topic, "name": (req.name or "").strip() or None, "email": req.email, "message": req.message.strip()}
+    try:
+        db = service_client()
+        await asyncio.to_thread(lambda: db.rpc("purge_old_contact_messages", {}).execute())
+        saved = await asyncio.to_thread(lambda: db.table("contact_messages").insert(row).execute().data)
+    except Exception as e:
+        raise fail(503, "I couldn't send your message just now. Please try again, or email us.", e)
+    emailed = await asyncio.to_thread(_send_contact_email, row)
+    if emailed and saved:
+        await asyncio.to_thread(lambda: db.table("contact_messages").update({"emailed": True}).eq("id", saved[0]["id"]).execute())
+    return {"saved": True, "emailed": emailed}
+
+
 @app.websocket("/ws/rectify")
 async def websocket_speech_rectifier(websocket: WebSocket):
     """

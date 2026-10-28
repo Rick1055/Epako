@@ -83,6 +83,24 @@ app.use((req, res, next) => {
 
 // Before compression, so requests, uploads and responses stream through untouched.
 app.use(api);
+
+// For search engines and AI crawlers (DESIGN.md, rules 28 and 35): the public pages only; nothing signed-in is listed.
+const PUBLIC_PAGES = ["/", "/sign-up", "/sign-in", "/help", "/terms", "/privacy", "/accessibility", "/clinician/sign-up"];
+const origin = (req) => `${req.headers["x-forwarded-proto"] === "https" ? "https" : req.protocol}://${req.headers["x-forwarded-host"] ?? req.headers.host}`;
+app.get("/robots.txt", (req, res) => {
+  res.type("text/plain").send(
+    ["User-agent: *", "Allow: /", ...["/home", "/speak", "/voice", "/progress", "/care", "/me", "/setup", "/clinician/"].map((p) => `Disallow: ${p}`), "", `Sitemap: ${origin(req)}/sitemap.xml`, ""].join("\n"),
+  );
+});
+app.get("/sitemap.xml", (req, res) => {
+  const urls = PUBLIC_PAGES.map((p) => `  <url><loc>${origin(req)}${p}</loc></url>`).join("\n");
+  res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
+});
+app.get("/llms.txt", (req, res) => {
+  res.type("text/plain").send(
+    `# Epako Voice\n\n> A web app for people with dysarthria: it listens, tidies up what they said, and says it back in a clear voice they chose; they practise daily and can share sessions with their speech therapist. A communication and practice aid, not a medical device.\n\n## Pages\n${PUBLIC_PAGES.map((p) => `- [${p === "/" ? "Welcome" : p.slice(1)}](${origin(req)}${p})`).join("\n")}\n`,
+  );
+});
 app.use(compression());
 
 if (DEVELOPMENT) {

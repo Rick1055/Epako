@@ -1129,3 +1129,50 @@ def test_voice_banking_returns_a_profile_that_can_be_saved_as_is(tmp_path):
         notes.append(str(tmp_path / f"n{i}.wav"))
     banked = VoiceRestorationEngine().create_profile_from_voice_notes(notes)
     api.VoiceProfile(**{k: banked[k] for k in api.VoiceProfile.model_fields})   # raises if out of range
+
+
+def _contact(c, **over):
+    body = {"topic": "voice", "email": "someone@example.com", "message": "The voice is quiet.", "captcha_token": "tok", **over}
+    return c.post("/api/contact", json=body)
+
+
+def test_contact_form_checks_everything_on_the_server(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api
+    c = TestClient(api.app)
+    db = mock.MagicMock()
+    db.table.return_value.insert.return_value.execute.return_value.data = [{"id": "m1"}]
+    monkeypatch.setattr(api, "service_client", lambda: db)
+    # A bot that fills in the hidden field is told all is well, and nothing is kept or sent.
+    assert _contact(c, website="http://spam").json() == {"saved": True, "emailed": True}
+    assert not db.table.called
+    # Bad input never reaches the database.
+    assert _contact(c, topic="sales").status_code == 422
+    assert _contact(c, email="not-an-address").status_code == 422
+    assert _contact(c, message="x" * 4001).status_code == 422
+    # Without the CAPTCHA's server secret the form can't be protected, so it refuses (fails closed).
+    monkeypatch.delenv("TURNSTILE_SECRET_KEY", raising=False)
+    assert _contact(c).status_code == 503
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "secret")
+    with mock.patch.object(api, "_captcha_ok", return_value=False):
+        assert _contact(c, email="a@example.com").status_code == 403
+    # A good message is saved; when mail isn't set up, the answer says it wasn't emailed (the page says so honestly).
+    with mock.patch.object(api, "_captcha_ok", return_value=True), mock.patch.object(api, "_send_contact_email", return_value=False):
+        r = _contact(c, email="b@example.com")
+    assert r.status_code == 200 and r.json() == {"saved": True, "emailed": False}
+    db.table.return_value.insert.assert_called_once()
+    with mock.patch.object(api, "_captcha_ok", return_value=True), mock.patch.object(api, "_send_contact_email", return_value=True):
+        assert _contact(c, email="c@example.com").json() == {"saved": True, "emailed": True}
+
+
+def test_contact_form_limits_each_sender():
+    from fastapi.testclient import TestClient
+    import api
+    c = TestClient(api.app)
+    limiter = api.service_client()   # the fake rate limiter (fake_limiter); the message table is a plain stand-in
+    rpc = limiter.rpc
+    limiter.rpc = lambda fn, params: rpc(fn, params) if fn == "rate_limit_hit" else mock.MagicMock()
+    limiter.table = mock.MagicMock()
+    with mock.patch.object(api, "_captcha_ok", return_value=True), mock.patch.object(api, "_send_contact_email", return_value=True):
+        codes = [_contact(c, email="same@example.com").status_code for _ in range(4)]
+    assert codes == [200, 200, 200, 429]

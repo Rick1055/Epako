@@ -144,8 +144,23 @@ test("security headers on every page: a strict CSP with a fresh nonce on the pag
   const violations: string[] = [];
   page.on("console", (m) => /Content Security Policy/.test(m.text()) && !/challenges\.cloudflare/.test(m.text()) && violations.push(m.text()));
   await page.goto("/");
-  const unsigned = await page.evaluate(() => [...document.querySelectorAll<HTMLScriptElement>("script:not([src])")].filter((s) => !s.nonce).length);
+  const unsigned = await page.evaluate(() => [...document.querySelectorAll<HTMLScriptElement>("script:not([src]):not([type='application/ld+json'])")].filter((s) => !s.nonce).length);
   expect(unsigned).toBe(0);
   await page.waitForTimeout(1500);
   expect(violations).toEqual([]);
+});
+
+test("robots.txt, sitemap.xml and llms.txt list the public pages only; the welcome page carries valid structured data (rules 28, 35)", async ({ page, request }) => {
+  const robots = await (await request.get("/robots.txt")).text();
+  expect(robots).toContain("Disallow: /home");
+  expect(robots).toMatch(/Sitemap: http.*\/sitemap\.xml/);
+  const sitemap = await (await request.get("/sitemap.xml")).text();
+  expect(sitemap).toContain("/privacy</loc>");
+  expect(sitemap).not.toContain("/home</loc>");
+  expect((await request.get("/llms.txt")).ok()).toBe(true);
+  await page.goto("/");
+  const blocks = await page.locator('script[type="application/ld+json"]').allTextContents();
+  expect(blocks.length).toBe(1);
+  const data = JSON.parse(blocks[0]);
+  expect(data["@graph"].map((n: { "@type": string }) => n["@type"])).toEqual(["Organization", "WebSite"]);
 });

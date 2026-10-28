@@ -1,6 +1,6 @@
 import { Outlet, useLocation } from "react-router";
 
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import type { Route } from "./+types/setup";
 
 export function meta({}: Route.MetaArgs) {
@@ -12,14 +12,14 @@ const TITLES = ["Your privacy", "Your voice", "Your microphone"];
 
 /**
  * DESIGN.md, Setup: three steps, a progress bar that fills (goal gradient), Back on every step, step 2 skippable.
- * Each step is its own route so the garden's camera walks one stepping stone per step.
+ * Each step is its own route, so Back and the address bar work as expected.
  */
 export default function Setup() {
   const { pathname } = useLocation();
   const step = Math.max(0, STEPS.indexOf(pathname.replace(/\/$/, "")));
   return (
     <>
-      <GardenStage>
+      <PageIntro>
         <p className="text-label text-ink-soft">
           Step {step + 1} of 3: {TITLES[step]}
         </p>
@@ -33,9 +33,9 @@ export default function Setup() {
         >
           <div className="h-full origin-left rounded-full bg-link transition-[scale] duration-500 ease-out" style={{ scale: `${(step + 1) / 3} 1` }} />
         </div>
-      </GardenStage>
+      </PageIntro>
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
-        <div className="max-w-[40rem] lg:max-w-[min(34rem,40vw)]">
+        <div className="max-w-[40rem]">
           <Outlet />
         </div>
       </div>

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
 import { type Mic, MicError, type MicProblem, openMic } from "~/lib/recorder";
-import { garden } from "~/three/store";
 import { Button } from "./Button";
 import { Message } from "./Message";
 
@@ -25,7 +24,6 @@ export function MicCheck({ onHeard }: { onHeard: () => void }) {
     () => () => {
       mic.current?.cancel();
       mic.current = undefined;
-      garden.setVoice(0);
     },
     [],
   );
@@ -36,7 +34,6 @@ export function MicCheck({ onHeard }: { onHeard: () => void }) {
     try {
       mic.current = await openMic((level) => {
         peak.current = Math.max(peak.current, level);
-        garden.setVoice(level);
         if (bar.current) bar.current.style.scale = `${Math.max(0.02, level)} 1`;
       });
       setState("listening");
@@ -50,7 +47,6 @@ export function MicCheck({ onHeard }: { onHeard: () => void }) {
     if (!mic.current) return;
     mic.current.cancel(); // the check never leaves the device
     mic.current = undefined;
-    garden.setVoice(0);
     const heard = peak.current > 0.35;
     setState(heard ? "heard" : "quiet");
     if (heard) onHeard();

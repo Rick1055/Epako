@@ -2,10 +2,7 @@ import { Link } from "react-router";
 
 import { ProsePage, Section } from "~/components/Prose";
 import { contact } from "~/lib/site";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/privacy";
-
-export const handle: GardenHandle = { garden: { stop: "hedgewalk" } };
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -93,8 +90,8 @@ export default function Privacy() {
 
       <Section title="Cookies and storage on your device">
         <p>
-          Two small cookies remember your look (morning or evening) and text size. Your browser also keeps your sign-in, your sound
-          settings and whether to show the moving garden. None of these are used to track you.
+          Two small cookies remember your look (morning or evening) and text size. Your browser also keeps your sign-in. None of
+          these are used to track you.
         </p>
       </Section>
 

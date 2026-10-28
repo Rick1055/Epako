@@ -5,9 +5,6 @@ import { Button } from "~/components/Button";
 import { Message } from "~/components/Message";
 import { Switch } from "~/components/Switch";
 import { myProfile, saveConsent } from "~/lib/patient";
-import type { GardenHandle } from "~/three/GardenHost";
-
-export const handle: GardenHandle = { garden: { stop: "stone1" } };
 
 export async function clientLoader() {
   return myProfile();

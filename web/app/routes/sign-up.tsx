@@ -4,16 +4,12 @@ import { Link, useNavigate } from "react-router";
 
 import { Button } from "~/components/Button";
 import { Captcha } from "~/components/Captcha";
-import { GardenStage } from "~/components/GardenStage";
+import { EntryPage } from "~/components/EntryPage";
 import { Message } from "~/components/Message";
 import { PasswordField } from "~/components/PasswordField";
 import { TextField } from "~/components/TextField";
 import { authMessage, supabase } from "~/lib/supabase";
-import { sounds } from "~/lib/sounds";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/sign-up";
-
-export const handle: GardenHandle = { garden: { stop: "path" } };
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -52,7 +48,6 @@ export function AccountForm({ clinician = false }: { clinician?: boolean }) {
     setBusy(false);
     if (error) return setError(authMessage(error));
     if (!data.session) return setSent(true); // the project asks people to confirm their email first
-    if (!clinician) void sounds.start();
     navigate(next);
   }
 
@@ -69,7 +64,7 @@ export function AccountForm({ clinician = false }: { clinician?: boolean }) {
   }
 
   return (
-    <form onSubmit={submit} noValidate className="flex max-w-[34rem] flex-col gap-6">
+    <form onSubmit={submit} noValidate className="flex flex-col gap-6">
       {error && <Message tone="error">{error}</Message>}
       <TextField label="Email" type="email" autoComplete="email" inputMode="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
       <PasswordField value={password} onChange={setPassword} meter autoComplete="new-password" onOk={onOk} />
@@ -100,14 +95,12 @@ export function AccountForm({ clinician = false }: { clinician?: boolean }) {
 
 export default function SignUp() {
   return (
-    <>
-      <GardenStage>
-        <h1 className="text-headline text-balance">Let's set you up. It only takes a minute.</h1>
-        <p className="mt-4">Your email and a password are all we need. We never ask for your name.</p>
-      </GardenStage>
-      <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
+    <EntryPage>
+      <h1 className="text-headline text-balance">Let's set you up. It only takes a minute.</h1>
+      <p className="mt-4">Your email and a password are all we need. We never ask for your name.</p>
+      <div className="mt-8">
         <AccountForm />
       </div>
-    </>
+    </EntryPage>
   );
 }

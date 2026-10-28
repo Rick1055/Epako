@@ -1,13 +1,10 @@
 import { redirect, useLoaderData } from "react-router";
 
 import { ButtonLink } from "~/components/Button";
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { api } from "~/lib/supabase";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/speak-done";
 import { SESSION_KEY } from "./speak";
-
-export const handle: GardenHandle = { garden: { stop: "summary" } };
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Well done - Epako Voice" }];
@@ -37,7 +34,7 @@ export default function SpeakDone() {
           : `You said ${n} ${n === 1 ? "phrase" : "phrases"}, and each fix you made teaches me your way of speaking.`;
 
   return (
-    <GardenStage size="hero">
+    <PageIntro>
       <h1 className="text-display text-balance">{first}</h1>
       <p className="mt-6">
         That was about {minutes} {minutes === 1 ? "minute" : "minutes"} of practice.
@@ -50,6 +47,6 @@ export default function SpeakDone() {
           Done for today
         </ButtonLink>
       </div>
-    </GardenStage>
+    </PageIntro>
   );
 }

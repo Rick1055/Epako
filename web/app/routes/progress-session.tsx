@@ -2,15 +2,12 @@ import { useState } from "react";
 import { Link, useLoaderData } from "react-router";
 
 import { Button } from "~/components/Button";
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { Icon } from "~/components/Icon";
 import { Message } from "~/components/Message";
 import { downloadReport } from "~/lib/report";
 import { ApiError, supabase } from "~/lib/supabase";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/progress-session";
-
-export const handle: GardenHandle = { garden: { stop: "border" } };
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "A session - Epako Voice" }];
@@ -47,7 +44,7 @@ export default function ProgressSession() {
 
   return (
     <>
-      <GardenStage>
+      <PageIntro>
         <Link to="/progress" className="inline-flex min-h-12 items-center gap-1 underline underline-offset-4">
           <Icon name="back" className="size-5" />
           Progress
@@ -56,9 +53,9 @@ export default function ProgressSession() {
         <p className="mt-4">
           {session.utterances_count} {session.utterances_count === 1 ? "phrase" : "phrases"}, {Math.round(Number(session.accuracy_rate))}% spot on first time.
         </p>
-      </GardenStage>
+      </PageIntro>
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
-        <div className="flex max-w-[44rem] flex-col gap-10 lg:max-w-[min(34rem,40vw)]">
+        <div className="flex max-w-[44rem] flex-col gap-10">
           <section aria-labelledby="report-title" className="rounded-card bg-surface p-6">
             <h2 id="report-title" className="text-title">
               Your report

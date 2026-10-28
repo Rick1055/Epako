@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "@fontsource-variable/atkinson-hyperlegible-next";
 @import "./styles/tokens.css";
-@import "lenis/dist/lenis.css";
 
 /* Evening look: pinned by <html data-theme="dark">, or the device's setting when nothing is pinned. */
 @custom-variant dark {
@@ -38,6 +37,11 @@
   --color-fill: var(--fill);
   --color-track: var(--track);
   --color-chart: var(--chart);
+  --color-moss: var(--moss);
+  --color-moss-ink: var(--moss-ink);
+  --color-cream: var(--cream);
+  --color-cream-ink: var(--cream-ink);
+  --color-cream-soft: var(--cream-soft);
   --color-error: var(--error);
   --color-warning: var(--warning);
   --color-scrim: var(--scrim);
@@ -130,64 +134,10 @@
   animation-duration: 250ms;
 }
 
-/*
-  The garden covers the whole screen behind every page, with no frame (its sky is the page colour). Where the
-  words are it lies under a light mist (--faint of its strength); elsewhere it is vivid (--vivid, which the
-  host lowers as the person scrolls into a long page). Phones: vivid in a band below the header (13-32% of the height; the header itself stays misted). Wide screens: vivid on the
-  right, misted on the left where the words are and under the header. The same breakpoint as Scene.tsx's frame().
-*/
-.garden-layer {
-  position: fixed;
-  inset: 0;
-  --vivid: 1;
-  --faint: 0.1;
-  -webkit-mask-image: linear-gradient(to bottom, rgb(0 0 0 / var(--faint)) 0%, rgb(0 0 0 / var(--faint)) 9%, rgb(0 0 0 / var(--vivid)) 13%, rgb(0 0 0 / var(--vivid)) 32%, rgb(0 0 0 / var(--faint)) 40%);
-  mask-image: linear-gradient(to bottom, rgb(0 0 0 / var(--faint)) 0%, rgb(0 0 0 / var(--faint)) 9%, rgb(0 0 0 / var(--vivid)) 13%, rgb(0 0 0 / var(--vivid)) 32%, rgb(0 0 0 / var(--faint)) 40%);
-}
-
-@media (min-width: 60rem) and (min-aspect-ratio: 23/20) {
-  /* Misted on the left where the words are, and in a band under the header so its links stay readable. */
-  .garden-layer {
-    --mist-from: 52%;
-    --mist-to: 72%;
-    -webkit-mask-image:
-      linear-gradient(to right, rgb(0 0 0 / var(--faint)) 0%, rgb(0 0 0 / var(--faint)) var(--mist-from), rgb(0 0 0 / var(--vivid)) var(--mist-to)),
-      linear-gradient(to bottom, rgb(0 0 0 / var(--faint)) 0, rgb(0 0 0 / var(--faint)) 4.5rem, #000 9rem);
-    mask-image:
-      linear-gradient(to right, rgb(0 0 0 / var(--faint)) 0%, rgb(0 0 0 / var(--faint)) var(--mist-from), rgb(0 0 0 / var(--vivid)) var(--mist-to)),
-      linear-gradient(to bottom, rgb(0 0 0 / var(--faint)) 0, rgb(0 0 0 / var(--faint)) 4.5rem, #000 9rem);
-    -webkit-mask-composite: source-in;
-    mask-composite: intersect;
-  }
-  /* Signed-in pages: the left rail moves the words right, so the mist reaches a little further. */
-  :root:has(.app-rail) .garden-layer {
-    --mist-from: 56%;
-    --mist-to: 76%;
-  }
-}
-
-/* Morning: the pale page colour at 90% read as a harsh white wash over the left, so more of the garden shows through
-   there: 22%, the most at which every link still clears 4.5:1 (tests/garden.spec.ts measures the real pixels; 30%
-   left "I'm a clinician" at 4.2:1). Evening keeps 10%. */
-:root[data-theme="light"] .garden-layer {
-  --faint: 0.22;
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) .garden-layer {
-    --faint: 0.22;
-  }
-}
-
-/* The still picture steps aside once the live garden is showing (GardenHost). */
-#garden-still[data-live] {
-  visibility: hidden;
-}
-
-/* Clinician screens are work screens: the garden is only a small corner, top right (DESIGN.md, the stops). */
-:root:has(.work-screen) .garden-layer,
-:root:has(.work-screen) #garden-still {
-  -webkit-mask-image: radial-gradient(ellipse 40% 45% at 100% 0%, rgb(0 0 0 / 0.9), rgb(0 0 0 / 0.06) 100%);
-  mask-image: radial-gradient(ellipse 40% 45% at 100% 0%, rgb(0 0 0 / 0.9), rgb(0 0 0 / 0.06) 100%);
+/* The entry pages (components/EntryPage.tsx) sit on the dark moss of the Sylva tree; their header takes the evening
+   colours there (light words on dark) in either theme, through the scheme-dark class (SiteHeader). */
+:root[data-moss] body {
+  background-color: var(--moss);
 }
 
 /* Sheets (components/MobileMenu.tsx): slide in under 200ms, page behind doesn't scroll. */
@@ -278,9 +228,9 @@ html:has(dialog[open]) {
   text-underline-offset: 4px;
 }
 
-/* Page changes (DESIGN.md, transitions): the new page's content rises into place while the garden walks behind it. */
+/* Page changes: the new page's content rises into place (short, transform and opacity only). */
 .page-in {
-  animation: page-in 320ms var(--ease-out) both;
+  animation: page-in 200ms var(--ease-out) both;
 }
 
 @keyframes page-in {

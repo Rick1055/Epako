@@ -4,18 +4,15 @@ import { Link, useLoaderData, useNavigate } from "react-router";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { Message } from "~/components/Message";
-import { BankVoice, useSample, VoicePicker, VoiceSliders } from "~/components/VoiceControls";
+import { useSample, VoicePicker } from "~/components/VoiceControls";
 import { myProfile, saveVoice, toProfile } from "~/lib/patient";
 import { ApiError } from "~/lib/supabase";
-import type { GardenHandle } from "~/three/GardenHost";
-
-export const handle: GardenHandle = { garden: { stop: "stone2" } };
 
 export async function clientLoader() {
   return toProfile((await myProfile()).voice_profile);
 }
 
-/** Step 2: choose a voice (or bank one from earlier recordings), then save. Skippable: the default voice is used. */
+/** Step 2: choose a voice, then save. Fine-tuning and voice banking wait on My voice. Skippable: the default voice is used. */
 export default function SetupVoice() {
   const saved = useLoaderData<typeof clientLoader>();
   const navigate = useNavigate();
@@ -40,8 +37,7 @@ export default function SetupVoice() {
     <div className="flex flex-col gap-8">
       <h1 className="text-headline text-balance">Now, the voice that speaks for you.</h1>
       <VoicePicker value={voice} onChange={setVoice} />
-      <VoiceSliders value={voice} onChange={setVoice} />
-      <BankVoice onProfile={setVoice} />
+      <p className="text-ink-soft">You can fine-tune it any time in My voice: its pitch, speed, warmth, or a voice closer to your own.</p>
       {error && <Message tone="error">{error}</Message>}
       {sampleError && <Message tone="error">{sampleError}</Message>}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

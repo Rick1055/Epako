@@ -2,27 +2,31 @@
 name: Epako Voice
 description: A calm, confident web app where people with dysarthria speak, hear themselves clearly in a voice they chose, and watch their progress grow; and where their clinician can see the same sessions.
 colors:
-  sand: "#F8F4EC"
-  sand-deep: "#EFEAE0"
+  sage-white: "#F3F7F4"
+  sage-mist: "#E7EFEA"
   surface: "#FFFFFF"
-  ink: "#1F2E30"
-  ink-soft: "#3E5053"
-  teal: "#2F7F83"
-  teal-ink: "#236468"
-  mint: "#8CC5B8"
-  mint-wash: "#DCEEE8"
-  coral: "#E89A7B"
-  coral-press: "#D9805F"
-  error: "#B5473A"
+  sage-wash: "#E2EEE7"
+  ink: "#1A2B25"
+  ink-soft: "#3F534B"
+  sage: "#2E6B4E"
+  sage-press: "#24573F"
+  leaf: "#3C8A66"
+  calm-blue: "#24577F"
+  sky-blue: "#2F6E99"
+  chart-blue: "#2A73A8"
+  error: "#B3443A"
   warning-ink: "#7A5200"
-  edge: "#6A7E80"
-  coral-edge: "#A45A3F"
-  dark-bg: "#12262A"
-  dark-surface: "#1B3439"
-  dark-surface-high: "#24434A"
-  dark-ink: "#F1EBDD"
-  dark-ink-soft: "#B8C6C3"
-  dark-edge: "#7F9B99"
+  edge: "#6B7F77"
+  moss: "#4A4D44"
+  moss-ink: "#EEF1E7"
+  dark-bg: "#0F1E1B"
+  dark-surface: "#172A26"
+  dark-surface-high: "#20372F"
+  dark-ink: "#E8F0EB"
+  dark-ink-soft: "#B3C4BB"
+  dark-sage: "#8FD0AE"
+  dark-blue: "#8DC3E8"
+  dark-edge: "#7F9A8F"
   dark-error: "#F0907F"
   dark-warning: "#E8C27A"
 typography:
@@ -99,6 +103,38 @@ components:
 # Design System: Epako Voice
 
 **Status:** being built in `web/`. Stages 1 to 3 of 5 are done (scaffold, page server, tokens, both themes, header, footer, phone menu, buttons, smooth-caret field, messages, 404, the persistent 3D garden, and the site-rules and garden tests). Stage 4 (2026-10-27): every screen in [Screens and features](#screens-and-features) exists and is connected to the API and Supabase: sign-up, sign-in, password reset, Setup, Home, Speak (phrase mode), Session summary, Voice, Progress and session detail, Care team, Me, Help, Terms, Privacy, Accessibility, and the clinician sign-up, verification, "we're checking", patient list, link code, patient and session screens with the assessment form and PDF. Not built yet: conversation mode (WebSocket), the Help contact form and its `POST /api/contact`, clinician two-step sign-in, and the 3D reactions marked below. The garden sounds, the stills for every stop, page entrance motion and Lenis scrolling are built. `epako_sylva_experience.html` is an unconnected mock whose wording and visuals are replaced by this document.
+
+## Redesign of 28 October 2026: light, fast, green and blue (this section overrides everything below it)
+
+The owner's call after two reviews: **"Patients do not deserve a janky website just because of their social status and income."** The site must run smoothly on cheap phones and old laptops with weak processors and graphics. Where an older section below (the persistent 3D garden, its stops, camera walks, garden sounds, the garden reactions, the mist, the coral accent) disagrees with this one, this one wins; those sections stay only as history.
+
+**1. Performance floor (the rule every change is measured against).**
+- No 3D on any page except the three entry pages (Welcome, Sign in, Sign up), and there only on capable devices (point 3). Everything else is plain HTML and CSS.
+- On a mid-range phone: the first screen readable and usable in under 2.5 s on 4G; no main-thread task over 200 ms after the page shows; no layout shift (CLS 0, as now); nothing animates that isn't feedback.
+- Page weight for a signed-in screen: under 300 KB of JavaScript and CSS (compressed), no images over 150 KB, fonts self-hosted (Atkinson Hyperlegible Next, already).
+- Motion: transitions 150 to 250 ms on transform and opacity only; none under reduced motion. No smooth-scroll library on task screens.
+
+**2. Look: sage green and calm blue, no coral.** Morning: a pale sage-white page (#F3F7F4), white cards, deep green-black ink (#1A2B25). The one primary action per screen (Speak, Get started, Save) is a deep sage-green button (#2E6B4E) with white text; links, progress, charts and focus rings are calm blue (#24577F, chart #2A73A8). Evening: deep green-navy (#0F1E1B) with pale sage (#8FD0AE) for the primary action and soft sky blue (#8DC3E8) for links. Every pair is checked by `scripts/check-contrast.mjs` (4.5:1 text, 3:1 large text and controls). The big round record button is sage green. Words stay calm and encouraging ("Take your time", "Nicely done", "Small steps add up"); nothing scolds, counts down or warns in red unless something is truly wrong.
+
+**3. The Sylva tree on the entry pages.** Welcome, Sign in and Sign up sit on the moss scene from `epako_sylva_experience.html` (a mossy root arching across a dark moss-green ground, #4A4D44, with ferns, small white flowers and pollen), full-screen behind the content; the text and forms sit on cream cards (#F4F1E8 with dark ink) so they are always readable. Its code is the mock's own, kept exact: a standalone page `web/public/sylva/` with its own copy of Three.js r149, shown in a frame behind the content.
+- **Weak devices see a still picture of it** (WebP, rendered from that page; desktop and phone versions, under 150 KB each): touch-first devices, fewer than 8 processor threads, under 8 GB of memory where the browser says, Save-Data, reduced motion, or no WebGL 2.
+- **Capable devices get the live scene**, loaded only after the page is interactive and idle, faded in over the still; if it draws under 30 frames a second for two seconds, it is removed and the still stays. It never blocks the form.
+- The rest of the public pages (Help, Terms, Privacy, Accessibility, 404, clinician sign-up and verification) are flat.
+
+**4. The 3D park is removed** (garden, people, city, birds, camera walks between pages, its still pictures and its sounds). It remains in git history on the `web-frontend` branch.
+
+**5. Navigation.**
+- Phone, signed in: a bottom tab bar of five with **words under every icon**: Home, Progress, Speak (raised, centre), My voice, Me. Care team becomes a card on Me (it is used once, to link a clinician). The header is the logo and a Menu button only (Help, Terms, Privacy, Accessibility, Sign out); the theme and sound settings move to Me. 16 to 20 px side margins everywhere.
+- Desktop, signed in: the left rail with the same five, labelled.
+- Garden sounds are gone; the app makes no sound except the voice the person asked to hear.
+
+**6. Screens made lighter.**
+- Every page starts with its heading and its task at the top; no decorative band.
+- Setup step 2 shows only the voice list (accent-ordered, with Play) and one line: "You can fine-tune it any time in My voice." The sliders and voice banking live on My voice.
+- Home and Progress: three numbers (phrases, spot on, minutes) and one bar per day for phrases; the metric switch is dropped. Bars never cover their day labels; a day with no practice is a thin line on the axis; each day's whole column is the tap target.
+- Footer contact details come from the environment (reserved sample values for the demo, as now).
+
+**7. What doesn't change:** the words, the flows, the API, the privacy rules, the accessibility rules, the tests' standards (contrast, axe, CLS 0, no sideways scroll).
 
 **Contents.** The first eight sections are the visual system. Then: [Who uses it](#who-uses-it), [Page flow](#page-flow), [Screens and features](#screens-and-features), [Clinician verification](#clinician-verification), [Behaviour that applies everywhere](#behaviour-that-applies-everywhere), [Site-wide rules](#site-wide-rules), [UX laws applied](#ux-laws-applied), [Motion, 3D and scroll](#motion-3d-and-scroll), [Accessibility and care](#accessibility-and-care), [Words](#words), [Build plan](#build-plan), [Open decisions](#open-decisions).
 

@@ -1,7 +1,7 @@
 import { Link, useLoaderData, useRouteLoaderData } from "react-router";
 
 import { ButtonLink } from "~/components/Button";
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { Icon } from "~/components/Icon";
 import { session, supabase } from "~/lib/supabase";
 import type { Route } from "./+types/clinician-patients";
@@ -36,13 +36,13 @@ export default function ClinicianPatients() {
   const me = useRouteLoaderData("routes/clinician-layout") as { name: string } | undefined;
   return (
     <>
-      <GardenStage>
+      <PageIntro>
         <h1 className="text-headline text-balance">Your patients{me ? `, ${me.name}` : ""}.</h1>
         <p className="mt-4">Patients who have shared their practice with you. They can stop sharing at any time.</p>
         <ButtonLink to="/clinician/link" className="mt-8 w-full sm:w-auto">
           Add a patient
         </ButtonLink>
-      </GardenStage>
+      </PageIntro>
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
         <div className="max-w-[44rem]">
           {patients.length === 0 ? (

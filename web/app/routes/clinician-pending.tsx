@@ -1,11 +1,8 @@
 import { Link, redirect } from "react-router";
 
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { requireSession, supabase } from "~/lib/supabase";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/clinician-pending";
-
-export const handle: GardenHandle = { garden: { stop: "greenhouse", still: true } };
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "We're checking - Epako Voice" }, { name: "robots", content: "noindex" }];
@@ -25,7 +22,7 @@ export function HydrateFallback() {
 
 export default function ClinicianPending() {
   return (
-    <GardenStage size="hero">
+    <PageIntro>
       <h1 className="text-headline text-balance">Thank you. We're checking your details.</h1>
       <p className="mt-4">
         We look you up on your professional register and make sure the name matches. It usually takes up to 2 working days. Sign in again
@@ -36,6 +33,6 @@ export default function ClinicianPending() {
           Sign out for now
         </Link>
       </p>
-    </GardenStage>
+    </PageIntro>
   );
 }

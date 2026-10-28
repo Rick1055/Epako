@@ -1,7 +1,7 @@
 import { Link, useLoaderData } from "react-router";
 
 import { ButtonLink } from "~/components/Button";
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { Icon } from "~/components/Icon";
 import { Message } from "~/components/Message";
 import { DayBars } from "~/components/DayBars";
@@ -9,10 +9,7 @@ import { StatTile } from "~/components/StatTile";
 import { useSample } from "~/components/VoiceControls";
 import { myProfile, toProfile } from "~/lib/patient";
 import { byDay, practice } from "~/lib/progress";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/home";
-
-export const handle: GardenHandle = { garden: { stop: "clearing" } };
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Today - Epako Voice" }];
@@ -39,7 +36,7 @@ export default function Home() {
 
   return (
     <>
-      <GardenStage>
+      <PageIntro>
         <h1 className="text-display text-balance">{greeting()}</h1>
         <p className="mt-4">
           {first
@@ -52,10 +49,10 @@ export default function Home() {
           <Icon name="mic" />
           Speak
         </ButtonLink>
-      </GardenStage>
+      </PageIntro>
 
       <div className="mx-auto flex max-w-[1120px] flex-col gap-10 px-5 pb-18 md:px-10">
-        <div className="flex w-full flex-col gap-10 lg:max-w-[min(34rem,40vw)]">
+        <div className="flex w-full max-w-[44rem] flex-col gap-10">
           {!voiceSaved && (
             <div className="rounded-card bg-surface p-6">
               <p className="font-semibold">Your voice isn't chosen yet.</p>

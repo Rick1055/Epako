@@ -4,14 +4,11 @@ import { Link } from "react-router";
 
 import { Button } from "~/components/Button";
 import { Captcha } from "~/components/Captcha";
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { Message } from "~/components/Message";
 import { TextField } from "~/components/TextField";
 import { authMessage, supabase } from "~/lib/supabase";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/forgot-password";
-
-export const handle: GardenHandle = { garden: { stop: "path" } };
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Reset your password - Epako Voice" }, { name: "robots", content: "noindex" }];
@@ -41,10 +38,10 @@ export default function ForgotPassword() {
 
   return (
     <>
-      <GardenStage>
+      <PageIntro>
         <h1 className="text-headline text-balance">Let's get you back in.</h1>
         <p className="mt-4">Tell us your email and we'll send a link to choose a new password.</p>
-      </GardenStage>
+      </PageIntro>
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
         {sent ? (
           <div className="max-w-[34rem]">

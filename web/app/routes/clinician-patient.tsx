@@ -1,6 +1,6 @@
 import { Link, useLoaderData, useParams } from "react-router";
 
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { Icon } from "~/components/Icon";
 import { supabase } from "~/lib/supabase";
 import type { Route } from "./+types/clinician-patient";
@@ -25,7 +25,7 @@ export default function ClinicianPatient() {
   const { sessions, assessed } = useLoaderData<typeof clientLoader>();
   return (
     <>
-      <GardenStage>
+      <PageIntro>
         <Link to="/clinician" className="inline-flex min-h-12 items-center gap-1 underline underline-offset-4">
           <Icon name="back" className="size-5" />
           Patients
@@ -34,7 +34,7 @@ export default function ClinicianPatient() {
         <p className="mt-4">
           {sessions.length} {sessions.length === 1 ? "session" : "sessions"} shared with you.
         </p>
-      </GardenStage>
+      </PageIntro>
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
         <div className="max-w-[44rem]">
           {sessions.length === 0 ? (

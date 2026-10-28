@@ -12,7 +12,6 @@ import {
 import type { Route } from "./+types/root";
 import { TEXT_SCALE, textSizeFromCookie } from "./lib/text-size";
 import { themeFromCookie } from "./lib/theme";
-import { GardenHost, GardenStill, useGardenStop } from "./three/GardenHost";
 import "./app.css";
 
 export function loader({ request }: Route.LoaderArgs) {
@@ -44,17 +43,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  // The garden lives here, behind every page: its still picture (also server-rendered) and the one live canvas,
-  // created once and walking between pages. The page sits above both.
-  const stop = useGardenStop();
   return (
-    <>
-      {stop && <GardenStill stop={stop.stop} />}
-      {stop && <GardenHost stop={stop.stop} still={stop.still} />}
-      <div id="page" className="relative z-10">
-        <Outlet />
-      </div>
-    </>
+    <div id="page" className="relative z-10">
+      <Outlet />
+    </div>
   );
 }
 

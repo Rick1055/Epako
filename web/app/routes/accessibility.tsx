@@ -2,10 +2,7 @@ import { Link } from "react-router";
 
 import { ProsePage, Section } from "~/components/Prose";
 import { contact } from "~/lib/site";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/accessibility";
-
-export const handle: GardenHandle = { garden: { stop: "hedgewalk" } };
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -25,10 +22,11 @@ export default function Accessibility() {
           <li>Large, plain text in a typeface made for easy reading, never smaller than 16 pixels, with a larger text setting in Me.</li>
           <li>Colours checked for contrast in both the morning and evening looks.</li>
           <li>Big buttons and controls, at least 48 pixels, so they're easy to press with a shaky hand.</li>
-          <li>Everything works with a keyboard and with screen readers; the moving garden is hidden from screen readers.</li>
+          <li>Everything works with a keyboard and with screen readers; the moving tree on the first pages is hidden from screen readers.</li>
           <li>You can type instead of speaking whenever you need to fix a phrase.</li>
-          <li>Your device's reduce-motion setting is respected, and Me lets you swap the moving garden for a still picture.</li>
-          <li>Garden sounds can be turned off with one press from the top of every page, and never play while you speak.</li>
+          <li>Built to run smoothly on older and low-cost phones and computers: no heavy graphics once you're signed in.</li>
+          <li>Your device's reduce-motion and data-saver settings are respected: the tree on the first pages becomes a still picture.</li>
+          <li>The app makes no sound except the voice you ask to hear.</li>
         </ul>
       </Section>
 
@@ -40,11 +38,9 @@ export default function Accessibility() {
         </ul>
       </Section>
 
-      <Section title="The garden's sounds and pictures">
+      <Section title="The tree">
         <p>
-          The garden sounds are mixed from public-domain recordings on Wikimedia Commons: "Gentle breeze and birds singing", "Birds singing
-          in garden" and "Robin's song" (CC0). The plants, trees, rocks, bench, table and lamps are scanned models from Poly Haven, and the
-          ground and path textures are from ambientCG, all CC0.
+          The mossy tree on the first pages is drawn in code with Three.js (MIT licence); nothing in it is a photograph of a real place.
         </p>
       </Section>
 

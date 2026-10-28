@@ -2,15 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { Button } from "~/components/Button";
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { Message } from "~/components/Message";
 import { PasswordField } from "~/components/PasswordField";
 import { authMessage, supabase } from "~/lib/supabase";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/reset-password";
 import { homeFor } from "./sign-in";
-
-export const handle: GardenHandle = { garden: { stop: "path" } };
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Choose a new password - Epako Voice" }, { name: "robots", content: "noindex" }];
@@ -51,9 +48,9 @@ export default function ResetPassword() {
 
   return (
     <>
-      <GardenStage>
+      <PageIntro>
         <h1 className="text-headline text-balance">Choose a new password.</h1>
-      </GardenStage>
+      </PageIntro>
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
         {ready === false ? (
           <div className="max-w-[34rem]">

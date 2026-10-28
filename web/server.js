@@ -50,7 +50,9 @@ app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "microphone=(self), camera=(), geolocation=(), payment=(), usb=()");
-  res.setHeader("X-Frame-Options", "DENY");
+  // Nothing may frame the site, except the Sylva tree page, which only our own entry pages frame (components/Sylva.tsx).
+  const framedByUs = req.path.startsWith("/sylva/");
+  res.setHeader("X-Frame-Options", framedByUs ? "SAMEORIGIN" : "DENY");
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   // Only over HTTPS (the demo tunnel): browsers ignore it on plain http, and it must never pin 127.0.0.1.
   if (req.headers["x-forwarded-proto"] === "https") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
@@ -67,12 +69,12 @@ app.use((req, res, next) => {
         "font-src 'self'",
         // blob: and data: are the 3D models' own embedded textures, read by the model loader.
         `connect-src 'self' blob: data: https://${supabase} wss://${supabase} https://api.pwnedpasswords.com`,
-        "frame-src https://challenges.cloudflare.com",
+        "frame-src 'self' https://challenges.cloudflare.com",
         "worker-src 'self' blob:",
         "object-src 'none'",
         "base-uri 'self'",
         "form-action 'self'",
-        "frame-ancestors 'none'",
+        framedByUs ? "frame-ancestors 'self'" : "frame-ancestors 'none'",
       ].join("; "),
     );
   }

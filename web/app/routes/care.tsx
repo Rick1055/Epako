@@ -3,15 +3,12 @@ import { useLoaderData, useRevalidator } from "react-router";
 
 import { Button } from "~/components/Button";
 import { Confirm } from "~/components/Confirm";
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { Icon } from "~/components/Icon";
 import { Message } from "~/components/Message";
 import { myProfile } from "~/lib/patient";
 import { supabase } from "~/lib/supabase";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/care";
-
-export const handle: GardenHandle = { garden: { stop: "benches" } };
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Care team - Epako Voice" }];
@@ -80,12 +77,12 @@ export default function Care() {
 
   return (
     <>
-      <GardenStage>
+      <PageIntro>
         <h1 className="text-headline text-balance">The people helping you.</h1>
         <p className="mt-4">Share your practice with a speech and language therapist or doctor, and stop whenever you like.</p>
-      </GardenStage>
+      </PageIntro>
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
-        <div className="flex max-w-[40rem] flex-col gap-10 lg:max-w-[min(34rem,40vw)]">
+        <div className="flex max-w-[40rem] flex-col gap-10">
           {error && <Message tone="error">{error}</Message>}
           {stopped && <Message tone="success">{stopped}</Message>}
 

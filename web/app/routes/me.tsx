@@ -4,20 +4,16 @@ import { useLoaderData, useNavigate } from "react-router";
 
 import { Button, ButtonLink } from "~/components/Button";
 import { Captcha } from "~/components/Captcha";
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { Message } from "~/components/Message";
 import { PasswordField } from "~/components/PasswordField";
 import { Switch } from "~/components/Switch";
 import { TextField } from "~/components/TextField";
 import { myProfile, saveConsent } from "~/lib/patient";
-import { sounds, useSoundPrefs } from "~/lib/sounds";
 import { api, ApiError, supabase } from "~/lib/supabase";
 import { currentTextSize, saveTextSize, type TextSize } from "~/lib/text-size";
 import { saveTheme, type Theme } from "~/lib/theme";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/me";
-
-export const handle: GardenHandle = { garden: { stop: "stump" } };
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Me - Epako Voice" }];
@@ -48,28 +44,17 @@ function Choice<T extends string>({ legend, options, value, onChange }: { legend
   );
 }
 
-function readGarden() {
-  try {
-    return localStorage.getItem("garden") !== "off";
-  } catch {
-    return true;
-  }
-}
-
 export default function Me() {
   const { consent, email } = useLoaderData<typeof clientLoader>();
   const navigate = useNavigate();
-  const sound = useSoundPrefs();
   const [keep, setKeep] = useState(consent);
   const [privacyNote, setPrivacyNote] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [look, setLook] = useState<Theme | "device">("device");
   const [size, setSize] = useState<TextSize>("normal");
-  const [showGarden, setShowGarden] = useState(true);
 
   useEffect(() => {
     setLook((document.cookie.match(/(?:^|;\s*)theme=(light|dark)/)?.[1] as Theme | undefined) ?? "device");
     setSize(currentTextSize());
-    setShowGarden(readGarden());
   }, []);
 
   async function changeConsent(on: boolean) {
@@ -84,25 +69,25 @@ export default function Me() {
     }
   }
 
-  function changeGarden(on: boolean) {
-    setShowGarden(on);
-    try {
-      if (on) localStorage.removeItem("garden");
-      else localStorage.setItem("garden", "off");
-    } catch {
-      // storage blocked: the switch can't be remembered
-    }
-    window.dispatchEvent(new Event("garden-setting"));
-  }
 
   return (
     <>
-      <GardenStage>
-        <h1 className="text-headline text-balance">Your corner of the garden.</h1>
-        <p className="mt-4">Your privacy, how things look and sound, and your account.</p>
-      </GardenStage>
+      <PageIntro>
+        <h1 className="text-headline text-balance">Your settings.</h1>
+        <p className="mt-4">Your care team, your privacy, how things look, and your account.</p>
+      </PageIntro>
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
-        <div className="flex max-w-[40rem] flex-col gap-10 lg:max-w-[min(34rem,40vw)]">
+        <div className="flex max-w-[40rem] flex-col gap-10">
+          <section aria-labelledby="care-title" className="flex flex-col gap-3 rounded-card bg-surface p-6">
+            <h2 id="care-title" className="text-title">
+              Care team
+            </h2>
+            <p>Share your sessions with your speech therapist, or see who you've shared them with.</p>
+            <ButtonLink to="/care" variant="secondary" className="self-start">
+              Open care team
+            </ButtonLink>
+          </section>
+
           <section aria-labelledby="privacy-title" className="flex flex-col gap-4 rounded-card bg-surface p-6">
             <h2 id="privacy-title" className="text-title">
               Privacy
@@ -129,7 +114,7 @@ export default function Me() {
 
           <section aria-labelledby="comfort-title" className="flex flex-col gap-8 rounded-card bg-surface p-6">
             <h2 id="comfort-title" className="text-title">
-              Comfort
+              How things look
             </h2>
             <Choice
               legend="Text size"
@@ -156,19 +141,6 @@ export default function Me() {
                 setLook(v);
                 saveTheme(v === "device" ? null : v);
               }}
-            />
-            <Switch checked={sound.on} onChange={sounds.setOn} label="Garden sounds" hint="A quiet winter garden: a light breeze and a robin now and then. They never play while you speak." />
-            {sound.on && (
-              <label className="block">
-                <span className="font-semibold">Garden sounds volume</span>
-                <input type="range" min={0} max={1} step={0.05} value={sound.volume} onChange={(e) => sounds.setVolume(Number(e.target.value))} className="mt-2 h-12 w-full accent-[var(--link)]" />
-              </label>
-            )}
-            <Switch
-              checked={showGarden}
-              onChange={changeGarden}
-              label="Show the moving garden"
-              hint="Off shows a still picture instead, if movement is tiring or your device is struggling. Your device's reduce-motion setting is always respected."
             />
           </section>
 
@@ -206,7 +178,6 @@ function DeleteAccount({ onDeleted }: { onDeleted: () => void }) {
     setBusy(true);
     try {
       await api("/api/me/data", { method: "DELETE", body: JSON.stringify({ confirm: "DELETE", password, captcha_token: token }) });
-      sounds.stop();
       await supabase().auth.signOut({ scope: "local" });
       onDeleted();
     } catch (err) {

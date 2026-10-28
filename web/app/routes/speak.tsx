@@ -2,11 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLoaderData, useNavigate } from "react-router";
 
 import { Button } from "~/components/Button";
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { Icon } from "~/components/Icon";
 import { Message } from "~/components/Message";
-import BlurText from "~/components/reactbits/BlurText";
-import ClickSpark from "~/components/reactbits/ClickSpark";
 import { RecordButton, type RecordState } from "~/components/RecordButton";
 import { DailyLeaves, PracticePrompts, VoiceBars } from "~/components/SpeakParts";
 import { TextField } from "~/components/TextField";
@@ -14,11 +12,7 @@ import { myProfile } from "~/lib/patient";
 import { byDay, practice } from "~/lib/progress";
 import { type Mic, MicError, openMic, play } from "~/lib/recorder";
 import { api, ApiError, session, supabase } from "~/lib/supabase";
-import type { GardenHandle } from "~/three/GardenHost";
-import { garden } from "~/three/store";
 import type { Route } from "./+types/speak";
-
-export const handle: GardenHandle = { garden: { stop: "bench" } };
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Speak - Epako Voice" }];
@@ -50,16 +44,6 @@ const MIC_HELP = {
   unsupported: "This browser can't share its microphone with me. A recent Chrome, Edge, Firefox or Safari will work.",
 };
 
-/** The page's own colours for the sparks (read from the tokens, so they follow the theme). */
-function useTokenColours(names: string[]) {
-  const [colours, setColours] = useState<string[]>([]);
-  useEffect(() => {
-    const style = getComputedStyle(document.documentElement);
-    setColours(names.map((n) => style.getPropertyValue(n).trim()).filter(Boolean));
-  }, []);
-  return colours;
-}
-
 export default function Speak() {
   const { consent, today } = useLoaderData<typeof clientLoader>();
   const navigate = useNavigate();
@@ -77,14 +61,11 @@ export default function Speak() {
   const level = useRef(0);
   const stopVoice = useRef<(() => void) | undefined>(undefined);
   const resultRef = useRef<HTMLElement>(null);
-  const sparks = useTokenColours(["--primary", "--link", "--fill"]);
 
   useEffect(
     () => () => {
       mic.current?.cancel();
       stopVoice.current?.();
-      garden.setVoice(0);
-      garden.setWorking(false);
     },
     [],
   );
@@ -100,7 +81,6 @@ export default function Speak() {
       mic.current = await openMic(
         (l) => {
           level.current = l;
-          garden.setVoice(l);
           ring.current?.style.setProperty("--level", l.toFixed(3));
         },
         () => void stopRef.current(), // hands-free: a pause after speaking ends the phrase
@@ -126,7 +106,6 @@ export default function Speak() {
       return setNotice("That was over a minute, which is more than I can take in one go. Try a shorter phrase, under 60 seconds.");
     }
     setState("thinking");
-    garden.setWorking(true);
     try {
       const id = await sessionId();
       const form = new FormData();
@@ -147,7 +126,6 @@ export default function Speak() {
       setState("idle");
       setNotice(e instanceof ApiError ? e.message : "Something got stuck on our side. Please try again.");
     } finally {
-      garden.setWorking(false);
     }
   }
 
@@ -198,7 +176,7 @@ export default function Speak() {
 
   return (
     <>
-      <GardenStage>
+      <PageIntro>
         <h1 className="sr-only">Speak</h1>
         <div className="flex flex-col gap-8">
           <DailyLeaves done={today + said.length} />
@@ -214,13 +192,15 @@ export default function Speak() {
           </div>
           {notice && <Message tone="error">{notice}</Message>}
         </div>
-      </GardenStage>
+      </PageIntro>
 
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
-        <div className="flex w-full flex-col gap-10 lg:max-w-[min(34rem,40vw)]">
+        <div className="flex w-full max-w-[44rem] flex-col gap-10">
           {result && (
             <section ref={resultRef} tabIndex={-1} aria-label="What I understood" className="rounded-card bg-surface p-6 outline-none">
-              <BlurText key={result.repaired_text} text={result.repaired_text} trigger="load" delay={70} className="text-display text-balance" />
+              <p key={result.repaired_text} className="page-in text-display text-balance">
+                {result.repaired_text}
+              </p>
               <p className="mt-4 text-ink-soft">
                 What I heard: <span className="text-ink">{result.raw_transcript}</span>
               </p>
@@ -271,11 +251,9 @@ export default function Speak() {
                 </form>
               ) : (
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                  <ClickSpark sparkColor={sparks} sparkCount={10} sparkRadius={34} shape="star" sparkSize={12} className="sm:w-auto">
-                    <Button className="w-full" onClick={() => confirm(result.repaired_text)}>
-                      Yes, that's right
-                    </Button>
-                  </ClickSpark>
+                  <Button className="w-full sm:w-auto" onClick={() => confirm(result.repaired_text)}>
+                    Yes, that's right
+                  </Button>
                   <Button variant="secondary" onClick={() => setFixing(true)}>
                     Not quite
                   </Button>

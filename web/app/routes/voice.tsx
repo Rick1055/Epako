@@ -2,16 +2,13 @@ import { useState } from "react";
 import { useBlocker, useLoaderData, useRevalidator } from "react-router";
 
 import { Button } from "~/components/Button";
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { Icon } from "~/components/Icon";
 import { Message } from "~/components/Message";
 import { BankVoice, useSample, VoicePicker, VoiceSliders } from "~/components/VoiceControls";
 import { myProfile, saveVoice, toProfile } from "~/lib/patient";
 import { ApiError } from "~/lib/supabase";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/voice";
-
-export const handle: GardenHandle = { garden: { stop: "ferns" } };
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "My voice - Epako Voice" }];
@@ -48,12 +45,12 @@ export default function Voice() {
 
   return (
     <>
-      <GardenStage>
+      <PageIntro>
         <h1 className="text-headline text-balance">The voice that speaks for you.</h1>
         <p className="mt-4">Choose a voice, shape it until it feels like yours, then save it.</p>
-      </GardenStage>
+      </PageIntro>
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
-        <div className="flex max-w-[40rem] flex-col gap-10 lg:max-w-[min(34rem,40vw)]">
+        <div className="flex max-w-[40rem] flex-col gap-10">
           <VoicePicker value={voice} onChange={setVoice} />
           <VoiceSliders value={voice} onChange={setVoice} />
           <div className="flex flex-col gap-4">

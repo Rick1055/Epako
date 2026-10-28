@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 
 import { Button } from "~/components/Button";
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { Icon } from "~/components/Icon";
 import { Message } from "~/components/Message";
 import { TextField } from "~/components/TextField";
@@ -32,14 +32,14 @@ export default function ClinicianLink() {
 
   return (
     <>
-      <GardenStage>
+      <PageIntro>
         <Link to="/clinician" className="inline-flex min-h-12 items-center gap-1 underline underline-offset-4">
           <Icon name="back" className="size-5" />
           Patients
         </Link>
         <h1 className="mt-2 text-headline text-balance">Add a patient with their code.</h1>
         <p className="mt-4">The patient makes a 10-character code in their Care team page. Each code works once, for 15 minutes.</p>
-      </GardenStage>
+      </PageIntro>
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
         <form onSubmit={submit} className="flex max-w-[34rem] flex-col gap-6">
           {result === "linked" && (

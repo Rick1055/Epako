@@ -1,7 +1,4 @@
-import { sounds } from "./sounds";
-
-// The microphone: plain 16 kHz mono WAV (what the speech API reads best), and a live 0..1 loudness for the meter
-// and the garden. Garden sounds fade out before the mic opens and come back after it closes (DESIGN.md, rule 48).
+// The microphone: plain 16 kHz mono WAV (what the speech API reads best), and a live 0..1 loudness for the meter.
 
 export type MicProblem = "denied" | "no-mic" | "unsupported";
 
@@ -26,12 +23,10 @@ const RATE = 16000;
  */
 export async function openMic(onLevel: (level: number) => void, onPause?: () => void, pauseSeconds = 2.5): Promise<Mic> {
   if (!navigator.mediaDevices?.getUserMedia || typeof AudioWorkletNode === "undefined") throw new MicError("unsupported");
-  const release = await sounds.hold();
   let stream: MediaStream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
   } catch (e) {
-    release();
     const name = (e as DOMException).name;
     throw new MicError(name === "NotAllowedError" || name === "SecurityError" ? "denied" : name === "NotFoundError" || name === "OverconstrainedError" ? "no-mic" : "unsupported");
   }
@@ -71,7 +66,6 @@ export async function openMic(onLevel: (level: number) => void, onPause?: () => 
     stream.getTracks().forEach((t) => t.stop());
     void ctx.close();
     onLevel(0);
-    setTimeout(release, 1000);
   };
 
   return {
@@ -146,9 +140,8 @@ export function wav(pcm: Float32Array, rate: number) {
   return new Blob([view], { type: "audio/wav" });
 }
 
-/** Play audio (a WAV from the API as a data address or bare base64, or a Blob), with garden sounds silent while it speaks. */
+/** Play audio (a WAV from the API as a data address or bare base64, or a Blob). */
 export async function play(audio: string | Blob, onEnd?: () => void) {
-  const release = await sounds.hold();
   // The API already sends a complete data address (data:audio/wav;base64,...); a bare base64 string is wrapped.
   const src = typeof audio !== "string" ? URL.createObjectURL(audio) : audio.startsWith("data:") ? audio : `data:audio/wav;base64,${audio}`;
   const el = new Audio(src);
@@ -156,7 +149,6 @@ export async function play(audio: string | Blob, onEnd?: () => void) {
   const done = () => {
     if (finished) return;
     finished = true;
-    release();
     if (typeof audio !== "string") URL.revokeObjectURL(src);
     onEnd?.();
   };

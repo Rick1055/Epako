@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLoaderData, useParams, useRevalidator } from "react-router";
 
 import { Button } from "~/components/Button";
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { Icon } from "~/components/Icon";
 import { Message } from "~/components/Message";
 import { downloadReport } from "~/lib/report";
@@ -102,7 +102,7 @@ export default function ClinicianSession() {
 
   return (
     <>
-      <GardenStage>
+      <PageIntro>
         <Link to={`/clinician/patient/${id}`} className="inline-flex min-h-12 items-center gap-1 underline underline-offset-4">
           <Icon name="back" className="size-5" />
           {pseudonym(id!)}
@@ -113,7 +113,7 @@ export default function ClinicianSession() {
         <p className="mt-4">
           {s.utterances_count ?? 0} utterances, {Math.round(Number(s.accuracy_rate ?? 0))}% confirmed without correction, {Math.round(Number(s.duration_seconds ?? 0) / 60)} min.
         </p>
-      </GardenStage>
+      </PageIntro>
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
         <div className="flex max-w-[52rem] flex-col gap-12">
           <p className="rounded-card bg-raised px-5 py-4 font-semibold">Automated measurements, not clinically validated, not a diagnosis.</p>

@@ -2,14 +2,11 @@ import { useState } from "react";
 import { redirect, useNavigate } from "react-router";
 
 import { Button } from "~/components/Button";
-import { GardenStage } from "~/components/GardenStage";
+import { PageIntro } from "~/components/PageIntro";
 import { Message } from "~/components/Message";
 import { TextField } from "~/components/TextField";
 import { requireSession, supabase } from "~/lib/supabase";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/clinician-verify";
-
-export const handle: GardenHandle = { garden: { stop: "greenhouse", still: true } };
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Your professional details - Epako Voice" }, { name: "robots", content: "noindex" }];
@@ -59,13 +56,13 @@ export default function ClinicianVerify({ loaderData }: Route.ComponentProps) {
 
   return (
     <>
-      <GardenStage>
+      <PageIntro>
         <h1 className="text-headline text-balance">Your professional details.</h1>
         <p className="mt-4">
           Patients share real speech with you, so we check every clinician against their professional register before they can see any
           patient. Your name is shown to patients who share with you.
         </p>
-      </GardenStage>
+      </PageIntro>
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
         <form onSubmit={submit} noValidate className="flex max-w-[34rem] flex-col gap-6">
           {error && <Message tone="error">{error}</Message>}

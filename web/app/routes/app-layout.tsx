@@ -6,9 +6,7 @@ import { Logo } from "~/components/Logo";
 import { MobileMenu, type MenuLink } from "~/components/MobileMenu";
 import { PageIn } from "~/components/PageIn";
 import { SiteFooter } from "~/components/SiteFooter";
-import { SoundToggle } from "~/components/SoundToggle";
 import { ThemeToggle } from "~/components/ThemeToggle";
-import { sounds, useSoundPrefs } from "~/lib/sounds";
 import { requireSession, supabase } from "~/lib/supabase";
 import type { Route } from "./+types/app-layout";
 
@@ -24,12 +22,13 @@ const tabs: { to: string; label: string; icon: IconName }[] = [
   { to: "/home", label: "Home", icon: "home" },
   { to: "/progress", label: "Progress", icon: "chart" },
   { to: "/speak", label: "Speak", icon: "mic" },
-  { to: "/care", label: "Care team", icon: "people" },
+  { to: "/voice", label: "My voice", icon: "wave" },
   { to: "/me", label: "Me", icon: "person" },
 ];
 
+// The header's menu (DESIGN.md, Redesign 5): help, the legal pages and signing out. Care team is a card on Me.
 const more: MenuLink[] = [
-  { to: "/voice", label: "My voice" },
+  { to: "/care", label: "Care team" },
   { to: "/help", label: "Help" },
   { to: "/terms", label: "Terms" },
   { to: "/privacy", label: "Privacy" },
@@ -42,10 +41,9 @@ function Header() {
     <header className="relative z-20 mx-auto flex w-full max-w-[1120px] items-center justify-between gap-4 px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 md:px-10">
       <Logo to="/home" />
       <div className="flex items-center gap-2">
-        {/* First control after the skip link, so sounds are one keypress from off (DESIGN.md). */}
-        <SoundToggle />
-        <ThemeToggle />
-        <MobileMenu links={more} label="More" className="lg:hidden" />
+        {/* Phones: the theme lives on Me, so the header is the logo and the menu. */}
+        <ThemeToggle className="hidden lg:inline-flex" />
+        <MobileMenu links={more} label="Menu" className="lg:hidden" />
       </div>
     </header>
   );
@@ -89,26 +87,16 @@ function Nav() {
 
 export default function AppLayout() {
   const navigate = useNavigate();
-  const { on } = useSoundPrefs();
 
   useEffect(() => {
-    // Browsers allow sound only after the person presses something: on a reload, the first press starts it.
-    const begin = () => on && void sounds.start();
-    window.addEventListener("pointerdown", begin, { once: true });
-    window.addEventListener("keydown", begin, { once: true });
     // Signing out in another tab signs out here too.
     const { data } = supabase().auth.onAuthStateChange((event) => {
       if (event === "SIGNED_OUT") {
-        sounds.stop();
         navigate("/sign-in");
       }
     });
-    return () => {
-      window.removeEventListener("pointerdown", begin);
-      window.removeEventListener("keydown", begin);
-      data.subscription.unsubscribe();
-    };
-  }, [navigate, on]);
+    return () => data.subscription.unsubscribe();
+  }, [navigate]);
 
   return (
     <div className="flex min-h-dvh flex-col pb-24 lg:pb-0 lg:pl-28">
@@ -130,8 +118,8 @@ export function HydrateFallback() {
   return (
     <div className="flex min-h-dvh flex-col lg:pl-28">
       <Header />
-      <main id="main" className="mx-auto w-full max-w-[1120px] px-5 pt-[40svh] md:px-10 lg:pt-[14vh]">
-        <p className="text-ink-soft">Opening your garden…</p>
+      <main id="main" className="mx-auto w-full max-w-[1120px] px-5 pt-8 md:px-10 lg:pt-12">
+        <p className="text-ink-soft">Getting things ready…</p>
       </main>
     </div>
   );

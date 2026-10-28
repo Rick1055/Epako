@@ -3,10 +3,7 @@ import { Link } from "react-router";
 import { Icon } from "~/components/Icon";
 import { ProsePage, Section } from "~/components/Prose";
 import { contact } from "~/lib/site";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/help";
-
-export const handle: GardenHandle = { garden: { stop: "hedgewalk" } };
 
 export function meta({}: Route.MetaArgs) {
   return [

@@ -5,11 +5,7 @@ import { PageIn } from "~/components/PageIn";
 import { SiteFooter } from "~/components/SiteFooter";
 import { ThemeToggle } from "~/components/ThemeToggle";
 import { requireSession, supabase } from "~/lib/supabase";
-import type { GardenHandle } from "~/three/GardenHost";
 import type { Route } from "./+types/clinician-layout";
-
-// Work screens: the garden seen from the greenhouse window, very still, no pointer play (DESIGN.md, the stops).
-export const handle: GardenHandle = { garden: { stop: "greenhouse", still: true } };
 
 /** Verified clinicians only; anyone else is sent to the step they're on. */
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {

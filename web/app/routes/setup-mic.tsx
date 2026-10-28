@@ -4,11 +4,8 @@ import { Link } from "react-router";
 import { ButtonLink } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { MicCheck } from "~/components/MicCheck";
-import type { GardenHandle } from "~/three/GardenHost";
 
-export const handle: GardenHandle = { garden: { stop: "stone3" } };
-
-/** Step 3: the mic check, then into the garden. */
+/** Step 3: the mic check, then on to Home. */
 export default function SetupMic() {
   const [heard, setHeard] = useState(false);
   return (

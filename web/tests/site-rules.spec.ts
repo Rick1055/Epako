@@ -54,10 +54,11 @@ test("the theme toggle flips the look, is remembered, and the server renders it 
   // The server-rendered HTML already carries the theme, before any script runs.
   const raw = await (await page.request.get("/")).text();
   expect(raw).toContain(`data-theme="${flipped}"`);
-  await page.reload();
+  // A plain page (the entry pages sit on the tree's moss in either look) takes the chosen look's page colour.
+  await page.goto("/help");
   await expect(html).toHaveAttribute("data-theme", flipped);
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(bg).toBe(flipped === "dark" ? "rgb(18, 38, 42)" : "rgb(248, 244, 236)");
+  expect(bg).toBe(flipped === "dark" ? "rgb(15, 30, 27)" : "rgb(243, 247, 244)");
 });
 
 test("the footer has working contact links, legal links and this year's copyright (rules 6, 11, 12, 16)", async ({ page }) => {

@@ -11,7 +11,7 @@ const dateWords = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateStr
 
 /**
  * One calm bar chart (dataviz: one series, so no legend; the heading names it). Thin bars with 4px rounded tops
- * standing on a quiet baseline, a 2px gap between them, a tooltip on hover and focus, labels only on today and the
+ * standing on a quiet baseline (a day with none is a thin line on it), a gap between them, a tooltip on hover and focus, labels only on today and the
  * best day, an optional reference line, no red anywhere, and the same numbers as a table one tap away.
  */
 export function DayBars({ days, measure, title, height = 144, goal }: { days: Day[]; measure: Measure; title: string; height?: number; goal?: number }) {
@@ -27,7 +27,7 @@ export function DayBars({ days, measure, title, height = 144, goal }: { days: Da
     <figure className="m-0">
       <div className="relative" style={{ height: height + 28 }} onPointerLeave={() => setHover(null)}>
         {goal !== undefined && (
-          <div className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-edge" style={{ bottom: 28 + (height * goal) / top }}>
+          <div className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-edge" style={{ bottom: 28 + ((height - 24) * goal) / top }}>
             <span className="absolute -top-6 right-0 text-[1rem] text-ink-soft">Daily {goal}</span>
           </div>
         )}
@@ -37,18 +37,22 @@ export function DayBars({ days, measure, title, height = 144, goal }: { days: Da
             const isToday = d.date === today;
             const named = !dense && v !== null && v > 0 && (isToday || v === best);
             return (
-              <li key={d.date} className="relative flex h-full flex-col items-center justify-end">
-                {named && <span className="mb-1 text-[1rem] font-semibold text-ink">{measure === "spotOn" ? `${v}%` : v}</span>}
+              <li key={d.date} className="relative h-full">
+                {/* The whole day column is the button (bar, the space above it), at least 44px wide on phones. */}
                 <button
                   type="button"
                   aria-label={`${dateWords(d.date)}: ${label(v, measure)}`}
                   onPointerEnter={() => setHover(i)}
                   onFocus={() => setHover(i)}
                   onBlur={() => setHover(null)}
-                  className="flex w-full justify-center outline-offset-2"
-                  style={{ height: v ? Math.max(6, (height * v) / top) : 6 }}
+                  className="flex h-full w-full flex-col items-center justify-end outline-offset-2"
                 >
-                  <span className={"h-full w-full max-w-8 rounded-t-[4px] transition-[opacity] duration-150 " + (v ? "bg-chart" : "bg-track") + (hover !== null && hover !== i ? " opacity-55" : "")} />
+                  {named && <span className="mb-1 text-[1rem] font-semibold text-ink">{measure === "spotOn" ? `${v}%` : v}</span>}
+                  {/* A day with no practice is a thin line on the axis, not a stub. */}
+                  <span
+                    className={"w-full max-w-8 transition-[opacity] duration-150 " + (v ? "rounded-t-[4px] bg-chart" : "bg-edge") + (hover !== null && hover !== i ? " opacity-55" : "")}
+                    style={{ height: v ? Math.max(4, ((height - 24) * v) / top) : 2 }}
+                  />
                 </button>
                 {hover === i && (
                   <span role="tooltip" className="pointer-events-none absolute bottom-full z-10 mb-2 rounded-input bg-ink px-3 py-1.5 text-[1rem] whitespace-nowrap text-bg shadow-float">

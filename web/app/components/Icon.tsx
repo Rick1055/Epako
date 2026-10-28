@@ -71,6 +71,8 @@ const paths = {
     </>
   ),
   leaf: <path d="M5 19c0-8 5-14 15-14 0 10-6 15-14 15M5 19l7-7" />,
+  // My voice: a sound wave.
+  wave: <path d="M4 12h2M8 8v8M12 5v14M16 8v8M20 12h0" />,
   download: <path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" />,
 } as const;
 

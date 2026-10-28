@@ -19,10 +19,6 @@ export type Mic = {
 };
 
 const RATE = 16000;
-// Copies each block of samples out of the audio thread.
-const TAP = `registerProcessor("tap", class extends AudioWorkletProcessor {
-  process(inputs) { const c = inputs[0][0]; if (c) this.port.postMessage(c.slice(0)); return true; }
-});`;
 
 /**
  * `onPause`: called once when the person has spoken and then been quiet for `pauseSeconds` (hands-free end of a
@@ -41,9 +37,8 @@ export async function openMic(onLevel: (level: number) => void, onPause?: () => 
   }
 
   const ctx = new AudioContext();
-  const url = URL.createObjectURL(new Blob([TAP], { type: "text/javascript" }));
-  await ctx.audioWorklet.addModule(url);
-  URL.revokeObjectURL(url);
+  // Copies each block of samples out of the audio thread (a plain file, so the CSP needn't allow scripts from blobs).
+  await ctx.audioWorklet.addModule("/worklets/tap.js");
   const source = ctx.createMediaStreamSource(stream);
   const tap = new AudioWorkletNode(ctx, "tap");
   const chunks: Float32Array[] = [];

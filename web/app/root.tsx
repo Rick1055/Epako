@@ -17,7 +17,8 @@ import "./app.css";
 
 export function loader({ request }: Route.LoaderArgs) {
   const cookie = request.headers.get("Cookie");
-  return { theme: themeFromCookie(cookie), textSize: textSizeFromCookie(cookie) };
+  // The CSP nonce for this page's own inline scripts (server.js); absent in development, where no CSP is sent.
+  return { theme: themeFromCookie(cookie), textSize: textSizeFromCookie(cookie), nonce: request.headers.get("x-csp-nonce") ?? undefined };
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -35,8 +36,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
-        <ScrollRestoration />
-        <Scripts />
+        <ScrollRestoration nonce={data?.nonce} />
+        <Scripts nonce={data?.nonce} />
       </body>
     </html>
   );

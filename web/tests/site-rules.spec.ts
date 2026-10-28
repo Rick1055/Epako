@@ -123,3 +123,28 @@ test("the suggested accent comes only from the device's language setting, and on
   expect(deviceAccent("en-IN")).toBeNull();
   expect(deviceAccent("en")).toBeNull();
 });
+
+test("security headers on every page: a strict CSP with a fresh nonce on the page's own scripts, no framing (rule 23)", async ({ page, request }) => {
+  const first = await request.get("/");
+  const second = await request.get("/");
+  const h = first.headers();
+  expect(h["x-content-type-options"]).toBe("nosniff");
+  expect(h["referrer-policy"]).toBe("strict-origin-when-cross-origin");
+  expect(h["permissions-policy"]).toContain("microphone=(self)");
+  expect(h["x-frame-options"]).toBe("DENY");
+  const csp = h["content-security-policy"] ?? "";
+  for (const rule of ["default-src 'self'", "object-src 'none'", "base-uri 'self'", "frame-ancestors 'none'"]) expect(csp).toContain(rule);
+  expect(csp).not.toContain("'unsafe-inline' 'unsafe-eval'");
+  expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
+  const nonce = csp.match(/'nonce-([^']+)'/)?.[1];
+  expect(nonce).toBeTruthy();
+  expect(second.headers()["content-security-policy"]).not.toContain(nonce!); // fresh per request
+  // Every inline script the page ships carries the nonce, so none is blocked; and the page runs with no CSP errors.
+  const violations: string[] = [];
+  page.on("console", (m) => /Content Security Policy/.test(m.text()) && !/challenges\.cloudflare/.test(m.text()) && violations.push(m.text()));
+  await page.goto("/");
+  const unsigned = await page.evaluate(() => [...document.querySelectorAll<HTMLScriptElement>("script:not([src])")].filter((s) => !s.nonce).length);
+  expect(unsigned).toBe(0);
+  await page.waitForTimeout(1500);
+  expect(violations).toEqual([]);
+});

@@ -11,7 +11,7 @@ export type VoiceProfile = {
   roughness_pct: number;
 };
 
-export type Accent = "American" | "British";
+export type Accent = "American" | "British" | "Indian";
 
 /** The six stock voices (VoiceRestorationEngine.voice_palette), in plain words, with the accent of each Piper voice. */
 export const VOICES: { key: string; name: string; about: string; accent: Accent }[] = [
@@ -21,6 +21,8 @@ export const VOICES: { key: string; name: string; about: string; accent: Accent 
   { key: "female_warm_gentle", name: "Gentle and warm", about: "A higher voice, soft and unhurried", accent: "American" },
   { key: "female_clear_bright", name: "Clear and bright", about: "A higher voice, crisp and lively", accent: "American" },
   { key: "female_authoritative", name: "Calm and sure", about: "A higher voice, clear and composed", accent: "British" },
+  { key: "male_indian_warm", name: "Steady and melodic", about: "A warm, natural Indian English voice", accent: "Indian" },
+  { key: "female_indian_clear", name: "Clear and expressive", about: "A bright, articulate Indian English voice", accent: "Indian" },
 ];
 
 /**
@@ -29,7 +31,7 @@ export const VOICES: { key: string; name: string; about: string; accent: Accent 
  */
 export function deviceAccent(language = typeof navigator === "undefined" ? "" : navigator.language): Accent | null {
   const region = language.split("-")[1]?.toUpperCase();
-  return region === "GB" || region === "IE" ? "British" : region === "US" || region === "CA" ? "American" : null;
+  return region === "IN" ? "Indian" : region === "GB" || region === "IE" ? "British" : region === "US" || region === "CA" ? "American" : null;
 }
 
 /** The five settings with their real allowed ranges (api.VoiceProfile) and plain labels. */

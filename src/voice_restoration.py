@@ -26,6 +26,8 @@ class VoiceRestorationEngine:
             "female_clear_bright": "en_US-amy-medium",
             "female_warm_gentle": "en_US-lessac-medium",
             "female_authoritative": "en_GB-alba-medium",
+            "male_indian_warm": "en_US-kusal-medium",
+            "female_indian_clear": "en_US-amy-medium",
         }
 
     def analyze_speaker_profile(self, audio, sample_rate: int = 16000):

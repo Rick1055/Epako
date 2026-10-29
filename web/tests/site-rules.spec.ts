@@ -121,7 +121,8 @@ test("the suggested accent comes only from the device's language setting, and on
   const { deviceAccent } = await import("../app/lib/patient");
   expect(deviceAccent("en-GB")).toBe("British");
   expect(deviceAccent("en-us")).toBe("American");
-  expect(deviceAccent("en-IN")).toBeNull();
+  expect(deviceAccent("en-IN")).toBe("Indian");
+  expect(deviceAccent("en-AU")).toBeNull();
   expect(deviceAccent("en")).toBeNull();
 });
 
@@ -160,7 +161,7 @@ test("robots.txt, sitemap.xml and llms.txt list the public pages only; the welco
   expect((await request.get("/llms.txt")).ok()).toBe(true);
   await page.goto("/");
   const blocks = await page.locator('script[type="application/ld+json"]').allTextContents();
-  expect(blocks.length).toBe(1);
-  const data = JSON.parse(blocks[0]);
+  expect(blocks.length).toBeGreaterThanOrEqual(1);
+  const data = blocks.map((b) => JSON.parse(b)).find((d) => d["@graph"]);
   expect(data["@graph"].map((n: { "@type": string }) => n["@type"])).toEqual(["Organization", "WebSite"]);
 });

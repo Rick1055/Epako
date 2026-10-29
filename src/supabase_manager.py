@@ -122,43 +122,6 @@ class SupabaseManager:
 
         return self.current_profile
 
-    def set_audio_consent(self, granted: bool) -> None:
-        """Audio uploads are blocked by storage RLS until this is True."""
-        if not self.current_profile:
-            raise RuntimeError("No authenticated patient profile active.")
-        res = (
-            self.client.table("patient_profiles")
-            .update({"consent_audio_storage": granted,
-                     "consent_updated_at": datetime.now().astimezone().isoformat()})
-            .eq("id", self.current_profile["id"])
-            .execute()
-        )
-        if not res.data:
-            raise RuntimeError("Consent update was not saved.")
-        self.current_profile.update(res.data[0])
-
-    def update_voice_profile(self, voice_palette: Dict[str, Any]) -> Dict[str, Any]:
-
-        if not self.current_profile:
-            raise RuntimeError(
-                "No authenticated patient profile active."
-            )
-        
-        patient_id = self.current_profile["id"]
-        res = (
-            self.client.table("patient_profiles")
-            .update({"voice_profile": voice_palette})
-            .eq("id", patient_id)
-            .execute()
-        )
-
-        if res.data:
-            self.current_profile["voice_profile"] = voice_palette
-            print("[+] Voice profile updated.")
-            return res.data[0]
-        
-        return self.current_profile
-
     def upload_audio(self, audio_data: Union[np.ndarray, bytes, str],
                      remote_filename: str,
                      folder: str = "raw",

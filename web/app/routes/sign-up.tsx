@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router";
 
 import { Button } from "~/components/Button";
 import { Captcha } from "~/components/Captcha";
+import { ConsentModal } from "~/components/ConsentModal";
 import { EntryPage } from "~/components/EntryPage";
 import { Message } from "~/components/Message";
 import { PasswordField } from "~/components/PasswordField";
@@ -29,23 +30,30 @@ export function AccountForm({ clinician = false }: { clinician?: boolean }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [showConsent, setShowConsent] = useState(false);
   const onOk = useCallback((ok: boolean) => setPasswordOk(ok), []);
   const next = clinician ? "/clinician/verify" : "/setup";
 
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     if (!passwordOk) return setError("Your password needs at least 12 characters and shouldn't be one that's been in a data leak.");
     if (!token) return setError("Please complete the quick check just above the button.");
+    setShowConsent(true);
+  }
+
+  async function executeSignUp() {
     setBusy(true);
+    setError("");
     const { data, error } = await supabase().auth.signUp({
       email,
       password,
-      options: { captchaToken: token, emailRedirectTo: `${location.origin}${next}` },
+      options: { captchaToken: token ?? undefined, emailRedirectTo: `${location.origin}${next}` },
     });
     captcha.current?.reset();
     setToken(null);
     setBusy(false);
+    setShowConsent(false);
     if (error) return setError(authMessage(error));
     if (!data.session) return setSent(true); // the project asks people to confirm their email first
     navigate(next);
@@ -70,7 +78,7 @@ export function AccountForm({ clinician = false }: { clinician?: boolean }) {
       <PasswordField value={password} onChange={setPassword} meter autoComplete="new-password" onOk={onOk} />
       <Captcha ref={captcha} onToken={setToken} />
       <Button type="submit" disabled={busy} className="w-full sm:w-auto sm:self-start">
-        {busy ? "Creating your account…" : "Create my account"}
+        {busy ? "Checking…" : "Create my account"}
       </Button>
       <p>
         Already have an account?{" "}
@@ -79,16 +87,23 @@ export function AccountForm({ clinician = false }: { clinician?: boolean }) {
         </Link>
       </p>
       <p className="text-[1rem] text-ink-soft">
-        By creating an account you agree to the{" "}
+        By clicking Create my account, you will review the explicit{" "}
         <Link to="/terms" className="underline underline-offset-4">
           terms
         </Link>{" "}
-        and how we look after your data in the{" "}
+        and{" "}
         <Link to="/privacy" className="underline underline-offset-4">
-          privacy notice
-        </Link>
-        .
+          DPDP Act privacy notice
+        </Link>{" "}
+        before your account is created.
       </p>
+      <ConsentModal
+        isOpen={showConsent}
+        onClose={() => setShowConsent(false)}
+        onAccept={executeSignUp}
+        busy={busy}
+        clinician={clinician}
+      />
     </form>
   );
 }

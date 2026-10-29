@@ -19,8 +19,6 @@ create or replace view public.patient_daily_progress
 with (security_invoker = true) as
 select
     p.id as patient_id,
-    p.full_name,
-    p.condition_type,
     s.session_date,
     count(distinct s.id) as total_sessions_today,
     round(avg(s.accuracy_rate), 2) as avg_accuracy,
@@ -31,5 +29,5 @@ select
 from public.patient_profiles p
 join public.therapy_sessions s on s.patient_id = p.id
 left join public.biomarker_logs b on b.session_id = s.id
-group by p.id, p.full_name, p.condition_type, s.session_date
+group by p.id, s.session_date
 order by s.session_date desc;

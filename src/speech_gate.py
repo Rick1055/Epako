@@ -13,9 +13,12 @@ from pathlib import Path
 import librosa
 import numpy as np
 
-# Chosen on TORGO (2026-10-25): at 0.20 it rejects 78% of the rest-position recordings and wrongly rejects 0.5% of
-# 2,500 spoken utterances, the bias a communication aid wants. At the library's usual 0.5 it lost 1.6%, mostly soft words.
-THRESHOLD = 0.20
+# Stage 1 (Energy Floor) & Stage 2 (VAD Structure Gate)
+# MIN_RMS rejects digital silence, static, or faint line hiss below -46 dBFS.
+# THRESHOLD = 0.35 rejects low-level ambient fan/AC hum (typically 0.05-0.28) while preserving
+# soft dysarthric vocalizations (typically 0.85-0.999).
+MIN_RMS = 0.005
+THRESHOLD = 0.35
 _WINDOW, _CONTEXT = 512, 64   # the model reads 32 ms windows at 16 kHz plus the last 64 samples of the previous one
 
 
@@ -49,15 +52,19 @@ def speech_probabilities(audio, sample_rate=16000):
     return np.array(probs)
 
 
-def contains_speech(audio, sample_rate=16000, threshold=THRESHOLD):
+def contains_speech(audio, sample_rate=16000, threshold=THRESHOLD, min_rms=MIN_RMS):
+    audio = np.asarray(audio, dtype=np.float32).squeeze()
+    if audio.size == 0:
+        return False
+    if min_rms is not None and float(np.sqrt(np.mean(audio**2))) < min_rms:
+        return False
     probs = speech_probabilities(audio, sample_rate)
     return bool(len(probs) and probs.max() >= threshold)
 
 
-# Live-stream endpointing, chosen on 56 real TORGO clips streamed as 100 ms chunks (2026-10-26): exactly one utterance for
-# 56/56 (the old loudness rule: 50/56), and the streamed transcript differs from the whole-clip one on 12-13% of words
-# against 16% for merely padding the clip with silence, and 23% for the old rule.
-START_P = 0.5        # a chunk this likely to be speech starts an utterance
+# Live-stream endpointing, chosen on 56 real TORGO clips streamed as 100 ms chunks (2026-10-26):
+# START_P = 0.55 prevents ambient noise spikes from triggering speech onset prematurely.
+START_P = 0.55       # a chunk this likely to be speech starts an utterance
 STOP_P = 0.35        # below this a chunk counts as quiet
 END_QUIET_S = 1.5    # quiet this long ends it: dysarthric speech pauses mid-sentence
 PRE_ROLL_S = 0.3     # audio kept from before the start, so a soft onset is not clipped

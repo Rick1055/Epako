@@ -71,7 +71,8 @@ export function Sylva() {
   }, [live]);
 
   return (
-    <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 bg-moss">
+    <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 bg-moss overflow-hidden">
+      <div className="relative size-full -translate-y-10 sm:-translate-y-16 md:-translate-y-20 lg:-translate-y-28 scale-[1.08] origin-top">
       <picture>
         <source media="(min-width: 901px)" srcSet="/sylva/still-wide-2.webp" />
         <img src="/sylva/still-narrow-3.webp" alt="" decoding="async" fetchPriority="low" className="size-full object-cover object-top max-[900px]:h-auto" />
@@ -86,6 +87,7 @@ export function Sylva() {
           className={"absolute inset-0 size-full border-0 transition-opacity duration-700 " + (shown ? "opacity-100" : "opacity-0")}
         />
       )}
+      </div>
     </div>
   );
 }
@@ -93,6 +95,7 @@ export function Sylva() {
 /** Only where the live scene will run smoothly: a mouse, a wide screen, 8+ threads, 8 GB+, no data saving, WebGL 2. */
 function capable() {
   const nav = navigator as Navigator & { connection?: { saveData?: boolean }; deviceMemory?: number };
+  if (/(?:^|;\s*)calm=1/.test(document.cookie)) return false; // user chose calm mode in Me
   if (matchMedia("(prefers-reduced-motion: reduce)").matches || !matchMedia("(pointer: fine)").matches || innerWidth < 901) return false;
   if (nav.connection?.saveData || (nav.hardwareConcurrency ?? 0) < 8 || (nav.deviceMemory !== undefined && nav.deviceMemory < 8)) return false;
   return !!document.createElement("canvas").getContext("webgl2");

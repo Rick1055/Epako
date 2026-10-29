@@ -11,6 +11,7 @@ import { Switch } from "~/components/Switch";
 import { TextField } from "~/components/TextField";
 import { myProfile, saveConsent } from "~/lib/patient";
 import { api, ApiError, supabase } from "~/lib/supabase";
+import { currentCalm, saveCalm } from "~/lib/calm";
 import { currentTextSize, saveTextSize, type TextSize } from "~/lib/text-size";
 import { saveTheme, type Theme } from "~/lib/theme";
 import type { Route } from "./+types/me";
@@ -51,10 +52,12 @@ export default function Me() {
   const [privacyNote, setPrivacyNote] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [look, setLook] = useState<Theme | "device">("device");
   const [size, setSize] = useState<TextSize>("normal");
+  const [calm, setCalm] = useState(false);
 
   useEffect(() => {
     setLook((document.cookie.match(/(?:^|;\s*)theme=(light|dark)/)?.[1] as Theme | undefined) ?? "device");
     setSize(currentTextSize());
+    setCalm(currentCalm());
   }, []);
 
   async function changeConsent(on: boolean) {
@@ -141,6 +144,12 @@ export default function Me() {
                 setLook(v);
                 saveTheme(v === "device" ? null : v);
               }}
+            />
+            <Switch
+              checked={calm}
+              onChange={(on) => { setCalm(on); saveCalm(on); }}
+              label="Calm mode"
+              hint="Keeps the backdrop still and mutes ambient sound. Useful on a tired day, or to save battery."
             />
           </section>
 

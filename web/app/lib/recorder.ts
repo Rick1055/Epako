@@ -160,3 +160,81 @@ export async function play(audio: string | Blob, onEnd?: () => void) {
     done();
   };
 }
+
+export type LiveStream = {
+  stop(): void;
+};
+
+/**
+ * Continuous real-time stream for conversation mode.
+ * Resamples blocks from the AudioWorklet to 16 kHz and emits 16-bit PCM little-endian chunks.
+ */
+export async function openLiveStream(
+  onChunk: (pcm16: Int16Array) => void,
+  onLevel: (level: number) => void,
+): Promise<LiveStream> {
+  if (!navigator.mediaDevices?.getUserMedia || typeof AudioWorkletNode === "undefined") throw new MicError("unsupported");
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+  } catch (e) {
+    const name = (e as DOMException).name;
+    throw new MicError(name === "NotAllowedError" || name === "SecurityError" ? "denied" : name === "NotFoundError" || name === "OverconstrainedError" ? "no-mic" : "unsupported");
+  }
+
+  const ctx = new AudioContext();
+  if (ctx.state === "suspended") await ctx.resume();
+  await ctx.audioWorklet.addModule("/worklets/tap.js");
+  const source = ctx.createMediaStreamSource(stream);
+  const tap = new AudioWorkletNode(ctx, "tap");
+
+  // Route to a silent gain node connected to destination to ensure the audio clock pumps continuously
+  const silentGain = ctx.createGain();
+  silentGain.gain.value = 0;
+  source.connect(tap);
+  tap.connect(silentGain);
+  silentGain.connect(ctx.destination);
+
+  let level = 0;
+  // Accumulate into 100 ms chunks (1600 samples at 16kHz) as required by Silero VAD windowing
+  const CHUNK_SIZE = 1600;
+  const chunkBuffer = new Int16Array(CHUNK_SIZE);
+  let buffered = 0;
+
+  tap.port.onmessage = (e: MessageEvent<Float32Array>) => {
+    const resampled = resample(e.data, ctx.sampleRate, RATE);
+    let sum = 0;
+    for (let i = 0; i < resampled.length; i++) {
+      const s = Math.max(-1, Math.min(1, resampled[i]));
+      sum += s * s;
+      const sample16 = s < 0 ? s * 0x8000 : s * 0x7fff;
+      chunkBuffer[buffered++] = sample16;
+      if (buffered >= CHUNK_SIZE) {
+        onChunk(chunkBuffer.slice(0, CHUNK_SIZE));
+        buffered = 0;
+      }
+    }
+
+    const db = 10 * Math.log10(sum / resampled.length + 1e-10);
+    const target = Math.min(1, Math.max(0, (db + 55) / 40));
+    level = target > level ? target : level * 0.97 + target * 0.03;
+    onLevel(level);
+  };
+
+  return {
+    stop() {
+      if (buffered > 0) {
+        onChunk(chunkBuffer.slice(0, buffered));
+        buffered = 0;
+      }
+      source.disconnect();
+      tap.disconnect();
+      silentGain.disconnect();
+      tap.port.onmessage = null;
+      stream.getTracks().forEach((t) => t.stop());
+      void ctx.close();
+      onLevel(0);
+    },
+  };
+}
+

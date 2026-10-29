@@ -10,7 +10,8 @@ import { DailyLeaves, PracticePrompts, VoiceBars } from "~/components/SpeakParts
 import { TextField } from "~/components/TextField";
 import { myProfile } from "~/lib/patient";
 import { byDay, practice } from "~/lib/progress";
-import { type Mic, MicError, openMic, play } from "~/lib/recorder";
+import { type LiveStream, type Mic, MicError, openLiveStream, openMic, play } from "~/lib/recorder";
+import { ConversationSocket, type RectifiedOutput, type Telemetry } from "~/lib/conversation";
 import { api, ApiError, session, supabase } from "~/lib/supabase";
 import type { Route } from "./+types/speak";
 
@@ -62,6 +63,9 @@ const MIC_HELP = {
 export default function Speak() {
   const { consent, today, usual } = useLoaderData<typeof clientLoader>();
   const navigate = useNavigate();
+  const [mode, setMode] = useState<"practice" | "conversation">("practice");
+  const [convStatus, setConvStatus] = useState<"idle" | "connecting" | "active" | "error">("idle");
+  const [messages, setMessages] = useState<{ id: string; raw: string; text: string; time: string; latency?: number }[]>([]);
   const [state, setState] = useState<RecordState>("idle");
   const [notice, setNotice] = useState("");
   const [result, setResult] = useState<Result | null>(null);
@@ -72,6 +76,11 @@ export default function Speak() {
   const [prompt, setPrompt] = useState<string | null>(null);
   const [promptPage, setPromptPage] = useState(0);
   const mic = useRef<Mic | undefined>(undefined);
+  const liveStream = useRef<LiveStream | undefined>(undefined);
+  const convSocket = useRef<ConversationSocket | undefined>(undefined);
+  const [isSpeakingLive, setIsSpeakingLive] = useState(false);
+  const [liveNotice, setLiveNotice] = useState("");
+  const liveNoticeTimer = useRef<number | undefined>(undefined);
   const ring = useRef<HTMLSpanElement>(null);
   const level = useRef(0);
   const stopVoice = useRef<(() => void) | undefined>(undefined);
@@ -80,10 +89,117 @@ export default function Speak() {
   useEffect(
     () => () => {
       mic.current?.cancel();
+      liveStream.current?.stop();
+      convSocket.current?.close();
       stopVoice.current?.();
+      if (liveNoticeTimer.current) clearTimeout(liveNoticeTimer.current);
     },
     [],
   );
+
+  function switchMode(m: "practice" | "conversation") {
+    if (m === mode) return;
+    if (state === "listening") {
+      mic.current?.cancel();
+      mic.current = undefined;
+      setState("idle");
+    }
+    if (convStatus === "active" || convStatus === "connecting") {
+      stopConversation();
+    }
+    stopVoice.current?.();
+    setNotice("");
+    setLiveNotice("");
+    if (liveNoticeTimer.current) clearTimeout(liveNoticeTimer.current);
+    setResult(null);
+    setMode(m);
+  }
+
+  async function startConversation() {
+    stopVoice.current?.();
+    setNotice("");
+    setConvStatus("connecting");
+    try {
+      const socket = new ConversationSocket({
+        onOpen: () => {
+          setConvStatus("active");
+        },
+        onTelemetry: (t: Telemetry) => {
+          setIsSpeakingLive(t.is_speaking);
+          const target = Math.min(1, t.rms * 8);
+          level.current = target;
+          ring.current?.style.setProperty("--level", target.toFixed(3));
+        },
+        onNoSpeech: (info) => {
+          const hint = info.message || "Low ambient sound or silence ignored";
+          setLiveNotice(hint);
+          if (liveNoticeTimer.current) clearTimeout(liveNoticeTimer.current);
+          liveNoticeTimer.current = window.setTimeout(() => setLiveNotice(""), 3500);
+        },
+        onRectified: (out: RectifiedOutput) => {
+          setLiveNotice("");
+          if (liveNoticeTimer.current) clearTimeout(liveNoticeTimer.current);
+          const textToShow = out.repaired_text || out.raw_text;
+          if (!textToShow) return;
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: String(Date.now()),
+              raw: out.raw_text,
+              text: textToShow,
+              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              latency: out.latency_ms,
+            },
+          ]);
+          if (out.audio_base64) {
+            play(out.audio_base64).then((stopFn) => {
+              stopVoice.current = stopFn;
+            });
+          }
+        },
+        onError: (err: string) => {
+          setNotice(err);
+        },
+        onClose: () => {
+          setConvStatus("idle");
+          setIsSpeakingLive(false);
+        },
+      });
+
+      await socket.connect();
+      convSocket.current = socket;
+
+      liveStream.current = await openLiveStream(
+        (pcm16) => {
+          socket.sendAudio(pcm16);
+        },
+        (l) => {
+          level.current = l;
+          ring.current?.style.setProperty("--level", l.toFixed(3));
+        },
+      );
+    } catch (e) {
+      convSocket.current?.close();
+      convSocket.current = undefined;
+      liveStream.current?.stop();
+      liveStream.current = undefined;
+      setConvStatus("error");
+      setNotice(e instanceof MicError ? MIC_HELP[e.problem] : e instanceof Error ? e.message : "Could not start conversation mode.");
+    }
+  }
+
+  function stopConversation() {
+    liveStream.current?.stop();
+    liveStream.current = undefined;
+    convSocket.current?.close();
+    convSocket.current = undefined;
+    setConvStatus("idle");
+    setIsSpeakingLive(false);
+    setLiveNotice("");
+    if (liveNoticeTimer.current) clearTimeout(liveNoticeTimer.current);
+    level.current = 0;
+    ring.current?.style.setProperty("--level", "0");
+  }
 
   async function press() {
     if (state === "listening") return stop();
@@ -193,24 +309,171 @@ export default function Speak() {
     <>
       <PageIntro>
         <h1 className="sr-only">Speak</h1>
-        <div className="flex flex-col gap-8">
-          <DailyLeaves done={today + said.length} />
-          {prompt && (
-            <div className="rounded-card bg-surface px-5 py-4">
-              <p className="text-label text-ink-soft">Try saying</p>
-              <p className="mt-1 text-title">{prompt}</p>
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <DailyLeaves done={today + said.length} />
+            <div className="inline-flex rounded-full bg-track p-1" role="tablist" aria-label="Speech mode">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "practice"}
+                onClick={() => switchMode("practice")}
+                className={
+                  "min-h-10 rounded-full px-5 text-label font-semibold transition-all duration-200 " +
+                  (mode === "practice"
+                    ? "bg-surface text-ink shadow-sm"
+                    : "text-ink-soft hover:text-ink")
+                }
+              >
+                Practice
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "conversation"}
+                onClick={() => switchMode("conversation")}
+                className={
+                  "min-h-10 rounded-full px-5 text-label font-semibold transition-all duration-200 " +
+                  (mode === "conversation"
+                    ? "bg-surface text-ink shadow-sm"
+                    : "text-ink-soft hover:text-ink")
+                }
+              >
+                Continuous Talk
+              </button>
+            </div>
+          </div>
+          {mode === "practice" ? (
+            <>
+              {prompt && (
+                <div className="rounded-card bg-surface px-5 py-4">
+                  <p className="text-label text-ink-soft">Try saying</p>
+                  <p className="mt-1 text-title">{prompt}</p>
+                </div>
+              )}
+              <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-8">
+                <RecordButton ref={ring} state={state} onPress={press} />
+                <VoiceBars level={level} active={state === "listening"} />
+              </div>
+              {notice && <Message tone="error">{notice}</Message>}
+            </>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-title">Continuous Conversation</h2>
+                  <p className="mt-1 text-ink-soft">
+                    Hands-free conversation mode. Speak naturally; as you pause, Epako speaks your words aloud.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={
+                      "size-3 rounded-full " +
+                      (convStatus === "active"
+                        ? isSpeakingLive
+                          ? "bg-link animate-pulse"
+                          : "bg-link"
+                        : convStatus === "connecting"
+                          ? "bg-ink-soft animate-ping"
+                          : "bg-edge")
+                    }
+                    aria-hidden="true"
+                  />
+                  <span className="text-label text-ink-soft">
+                    {convStatus === "active"
+                      ? isSpeakingLive
+                        ? "Listening to you…"
+                        : "Active & Waiting for speech"
+                      : convStatus === "connecting"
+                        ? "Connecting…"
+                        : "Inactive"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col items-center gap-4 py-2 sm:flex-row sm:justify-start sm:gap-6">
+                {convStatus === "active" || convStatus === "connecting" ? (
+                  <Button
+                    variant="danger"
+                    onClick={stopConversation}
+                    className="w-full sm:w-auto min-h-14 px-8 text-label"
+                  >
+                    <Icon name="mic" className="size-5" />
+                    Stop Conversation
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    onClick={startConversation}
+                    className="w-full sm:w-auto min-h-14 px-8 text-label"
+                  >
+                    <Icon name="mic" className="size-5" />
+                    Start Continuous Talk
+                  </Button>
+                )}
+                <VoiceBars level={level} active={convStatus === "active"} />
+              </div>
+
+              {notice && <Message tone="error">{notice}</Message>}
             </div>
           )}
-          <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-8">
-            <RecordButton ref={ring} state={state} onPress={press} />
-            <VoiceBars level={level} active={state === "listening"} />
-          </div>
-          {notice && <Message tone="error">{notice}</Message>}
         </div>
       </PageIntro>
 
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
         <div className="flex w-full max-w-[44rem] flex-col gap-10">
+          {mode === "conversation" ? (
+            <section aria-label="Conversation Feed" className="flex flex-col gap-4 rounded-card bg-surface p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-label font-semibold text-ink-soft">Conversation Feed</h3>
+                {liveNotice && (
+                  <span
+                    role="status"
+                    aria-live="polite"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-raised px-3 py-1 text-[0.85rem] font-medium text-ink-soft animate-fade-in border border-edge/60"
+                  >
+                    <Icon name="wave" className="size-3.5 shrink-0 text-ink-soft" />
+                    {liveNotice}
+                  </span>
+                )}
+              </div>
+              {messages.length === 0 ? (
+                <div className="rounded-input border-[1.5px] border-dashed border-edge p-8 text-center text-ink-soft">
+                  {convStatus === "active" ? (
+                    liveNotice ? (
+                      <span className="inline-flex items-center gap-2 font-medium text-ink">
+                        <Icon name="wave" className="size-4 shrink-0 text-link" />
+                        {liveNotice}
+                      </span>
+                    ) : (
+                      "Start speaking. Your words will appear and be spoken aloud in your chosen voice when you pause."
+                    )
+                  ) : (
+                    'Press "Start Continuous Talk" above to begin hands-free conversation.'
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-2">
+                  {messages.map((m) => (
+                    <div key={m.id} className="rounded-card bg-raised p-4 transition-all duration-200">
+                      <div className="flex items-center justify-between gap-2 text-label text-ink-soft">
+                        <span>{m.time}</span>
+                        {m.latency !== undefined && <span>{m.latency} ms</span>}
+                      </div>
+                      <p className="mt-2 text-title font-semibold text-ink">{m.text}</p>
+                      {m.raw && m.raw !== m.text && (
+                        <p className="mt-1 text-[0.95rem] text-ink-soft">
+                          Heard: <span className="italic">{m.raw}</span>
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : (
+            <>
           {result && (
             <section ref={resultRef} tabIndex={-1} aria-label="What I understood" className="rounded-card bg-surface p-6 outline-none">
               <p key={result.repaired_text} className="page-in text-display text-balance">
@@ -329,6 +592,8 @@ export default function Speak() {
                 Finish for now
               </Button>
             </section>
+          )}
+            </>
           )}
         </div>
       </div>

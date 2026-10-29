@@ -91,6 +91,13 @@
   body {
     min-height: 100dvh;
     background-color: var(--bg);
+    background-image:
+      radial-gradient(ellipse 65% 50% at 20% 12%, light-dark(rgba(60, 138, 102, 0.07), rgba(143, 208, 174, 0.05)) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 45% at 85% 85%, light-dark(rgba(47, 110, 153, 0.06), rgba(141, 195, 232, 0.045)) 0%, transparent 65%),
+      radial-gradient(circle, light-dark(rgba(26, 43, 37, 0.035), rgba(232, 240, 235, 0.03)) 1px, transparent 1px),
+      linear-gradient(180deg, var(--bg) 0%, var(--bg-deep) 100%);
+    background-size: 100% 100%, 100% 100%, 28px 28px, 100% 100%;
+    background-attachment: fixed;
     color: var(--ink);
     font-family: var(--font-sans);
     font-size: var(--text-body);
@@ -138,6 +145,12 @@
    colours there (light words on dark) in either theme, through the scheme-dark class (SiteHeader). */
 :root[data-moss] body {
   background-color: var(--moss);
+  background-image:
+    radial-gradient(64% 52% at 27% 84%, rgba(232, 238, 222, 0.09) 0%, transparent 72%),
+    radial-gradient(70% 60% at 92% 8%, rgba(24, 28, 20, 0.12) 0%, transparent 68%),
+    radial-gradient(circle, rgba(238, 241, 231, 0.035) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 28px 28px;
+  background-attachment: fixed;
 }
 
 /* Sheets (components/MobileMenu.tsx): slide in under 200ms, page behind doesn't scroll. */
@@ -245,3 +258,40 @@ html:has(dialog[open]) {
     animation: none;
   }
 }
+
+/* Gentle Leaf Reward celebration (Feature 3): soft upward drift with smooth ease-out. */
+.leaf-float-up {
+  animation: leaf-float 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes leaf-float {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.85);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-6px) scale(1.08);
+  }
+  75% {
+    opacity: 0.85;
+    transform: translateY(-16px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.95);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leaf-float-up {
+    animation: leaf-fade 2s ease-out forwards;
+  }
+  @keyframes leaf-fade {
+    0% { opacity: 0; }
+    25% { opacity: 1; }
+    75% { opacity: 0.8; }
+    100% { opacity: 0; }
+  }
+}
+

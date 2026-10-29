@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "9753be2a-33d1-4071-a0b3-7fe2297cb594",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\candidate.json",
+  "output": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\dystts-runtime.html",
+  "specification": {
+    "sha256": "493d6b70a5a01b4ecf07e8ce59e4ceef781691c5dbb084ec756df7fdd9af7fdb",
+    "bytes": 8353
+  },
+  "artifact": {
+    "sha256": "e7f0957bb00944ec79a2f9583deaae81f799b0ef3f69c91ec6e65135a919c51e",
+    "bytes": 862856
+  }
+}

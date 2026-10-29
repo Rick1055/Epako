@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\candidate.json",
+    "sha256": "493d6b70a5a01b4ecf07e8ce59e4ceef781691c5dbb084ec756df7fdd9af7fdb",
+    "bytes": 8353
+  },
+  "artifact": {
+    "path": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\dystts-runtime.html",
+    "sha256": "e7f0957bb00944ec79a2f9583deaae81f799b0ef3f69c91ec6e65135a919c51e",
+    "bytes": 862856
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\review-4\\dystts-runtime.finalize.json",
+    "summaryReceipt": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\review-4\\dystts-runtime.finalize-summary.json",
+    "browserCheckReceipt": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\review-4\\dystts-runtime.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-25T11:58:05.439Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 8071,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

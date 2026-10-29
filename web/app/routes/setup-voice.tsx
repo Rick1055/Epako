@@ -37,7 +37,7 @@ export default function SetupVoice() {
     <div className="flex flex-col gap-8">
       <h1 className="text-headline text-balance">Now, the voice that speaks for you.</h1>
       <VoicePicker value={voice} onChange={setVoice} />
-      <p className="text-ink-soft">You can fine-tune it any time in My voice: its pitch, speed, warmth, or a voice closer to your own.</p>
+      <p className="text-ink-soft">You can fine-tune it any time in My voice: its pitch, speed, warmth, or tune a voice to recordings of how you used to speak (not an exact clone, but tuned to your natural cadence and feel).</p>
       {error && <Message tone="error">{error}</Message>}
       {sampleError && <Message tone="error">{sampleError}</Message>}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

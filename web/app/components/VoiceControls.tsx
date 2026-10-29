@@ -44,7 +44,7 @@ export function VoicePicker({ value, onChange }: { value: VoiceProfile; onChange
       <p className="mt-1 text-ink-soft">
         {accent
           ? `Your device is set to ${accent} English, so ${accent} voices come first. Any voice is yours to choose.`
-          : "There are American and British English accents so far. Pick whichever sounds most like you."}
+          : "There are Indian, British, and American English accents. Pick whichever sounds most like you."}
       </p>
       {error && (
         <div className="mt-4">
@@ -149,10 +149,12 @@ export function BankVoice({ onProfile }: { onProfile: (p: VoiceProfile) => void 
         Use recordings of your earlier voice
       </h2>
       <p className="mt-2">
-        If you have a few clear recordings of yourself speaking from before, I can listen to them and pick the closest voice, then tune it
-        to your pitch and pace. It won't copy your voice exactly, but it can come close in feel.
+        If you have recordings of yourself speaking from before your speech changed, I can listen to them to understand how you used to speak.
       </p>
-      <p className="mt-2 text-[1rem] text-ink-soft">2 to 10 recordings, up to 10 MB each. Voice notes and video sound both work.</p>
+      <div className="mt-3 rounded-input border-[1.5px] border-edge bg-raised p-4 text-[0.95rem] text-ink-soft">
+        <strong className="font-semibold text-ink">How voice banking works:</strong> This doesn't clone or copy your raw audio directly. Instead, it measures your natural vocal pitch and rhythm, picks the closest clear voice in our library, and tunes it to match your natural cadence and feel.
+      </div>
+      <p className="mt-3 text-[1rem] text-ink-soft">2 to 10 recordings, up to 10 MB each. Voice notes and video sound both work.</p>
       <input ref={input} type="file" accept="audio/*,video/*" multiple className="sr-only" onChange={(e) => choose([...(e.target.files ?? [])])} tabIndex={-1} />
       <Button variant="secondary" className="mt-4" disabled={busy} onClick={() => input.current?.click()}>
         {busy ? "Listening to them…" : "Choose recordings"}

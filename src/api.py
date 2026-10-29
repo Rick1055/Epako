@@ -431,6 +431,7 @@ async def rectify_speech(
         return {
             "success": True,
             "speech_detected": False,
+            "message": "Low ambient sound or silence ignored",
             "raw_transcript": "",
             "repaired_text": "",
             "rectified_audio": None,
@@ -445,8 +446,14 @@ async def rectify_speech(
         asyncio.to_thread(asr.transcribe, audio, sample_rate=16000),
         asyncio.to_thread(get_repair_engine, authorization.partition(' ')[2], user.id),
         attempt(get_voice, authorization.partition(' ')[2], user.id))
-    raw_transcript = asr_res.get("text", "")
+    raw_transcript = asr_res.get("text", "").strip()
     asr_latency = asr_res.get("latency_ms", 0.0)
+
+    # Rejection of low-confidence hallucination on ambient noise
+    words = asr_res.get("words")
+    avg_conf = (sum(w["confidence"] for w in words) / len(words)) if (words and len(words) > 0) else (0.0 if not raw_transcript else 1.0)
+    if words and avg_conf < 0.30:
+        raw_transcript = "" 
 
     # 2. Intent & Dysfluency Repair
     repair_res = await asyncio.to_thread(repair_eng.repair, raw_transcript, asr_res.get("words"))   # snapping calls espeak: seconds on a cold cache
@@ -1042,7 +1049,7 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                 pre_roll.append(chunk)
                 while len(pre_roll) > 1 and sum(map(len, pre_roll)) > PRE_ROLL_S * 16000:
                     pre_roll.pop(0)
-                if p >= START_P:
+                if p >= START_P and rms >= 0.005:
                     is_speaking, quiet_samples, voiced_samples = True, 0, 0
                     to_buffer, pre_roll = pre_roll, []
                 else:
@@ -1074,7 +1081,7 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                 quiet_samples = voiced_samples = 0
 
                 if too_short:   # a click or a cough
-                    await websocket.send_json({"type": "no_speech"})
+                    await websocket.send_json({"type": "no_speech", "reason": "too_short", "message": "Low ambient sound or silence ignored"})
                     continue
 
                 start_rectify = time.time()
@@ -1086,7 +1093,7 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                     continue
 
                 if not await asyncio.to_thread(contains_speech, utterance_audio):
-                    await websocket.send_json({"type": "no_speech"})
+                    await websocket.send_json({"type": "no_speech", "reason": "ambient_noise", "message": "Low ambient sound or silence ignored"})
                     continue
 
                 asr = await asyncio.to_thread(get_asr_engine)
@@ -1094,8 +1101,14 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                     asyncio.to_thread(asr.transcribe, utterance_audio, sample_rate=16000),
                     asyncio.to_thread(get_repair_engine, auth_msg['token'], user.id),
                     attempt(get_voice, auth_msg['token'], user.id))
-                raw_text = asr_res.get("text", "")
-                repaired = (await asyncio.to_thread(repair.repair, raw_text, asr_res.get("words"))).get("repaired_text", raw_text)
+                raw_text = asr_res.get("text", "").strip()
+                words = asr_res.get("words")
+                avg_conf = (sum(w["confidence"] for w in words) / len(words)) if (words and len(words) > 0) else (0.0 if not raw_text else 1.0)
+                if not raw_text or (words and avg_conf < 0.30):
+                    await websocket.send_json({"type": "no_speech", "reason": "low_confidence", "message": "Low ambient sound or silence ignored"})
+                    continue
+
+                repaired = (await asyncio.to_thread(repair.repair, raw_text, words)).get("repaired_text", raw_text)
 
                 audio_b64, voice_error = None, None  # nothing understood: no audio, never the patient's own recording as "rectified"
                 if repaired:

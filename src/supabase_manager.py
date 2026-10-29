@@ -204,23 +204,3 @@ class SupabaseManager:
         )
 
         return remote_path
-
-    def get_recovery_trajectory(
-        self,
-        patient_id: Optional[str] = None,
-        limit_days: int = 30,
-    ) -> List[Dict[str, Any]]:
-       
-        pid = patient_id or (self.current_profile["id"] if self.current_profile else None)
-        if not pid:
-            return []
-        res = (
-            self.client.table("patient_daily_progress")
-            .select("*")
-            .eq("patient_id", pid)
-            .order("session_date", desc=True)
-            .limit(limit_days)
-            .execute()
-        )
-
-        return (res.data or [])[::-1]

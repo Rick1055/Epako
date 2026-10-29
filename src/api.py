@@ -840,16 +840,25 @@ def create_clinical_pdf_report(
     vowels = (row.get("metrics") or {}).get("vowel_space") or {}   # the vowel-space chart's points, stored by /api/session/analyze
     biomarkers.update({k: vowels.get(k) for k in ("mean_f1", "mean_f2", "f1_dispersion", "f2_dispersion")})
 
+    patient_id = sessions[0]["patient_id"]
+    try:
+        past_bios = client.table("biomarker_logs").select("articulation_velocity, stability_index, created_at").eq("patient_id", patient_id).order("created_at").limit(10).execute().data or []
+        history = [h for h in past_bios if h.get("articulation_velocity") is not None]
+    except Exception as e:
+        print(f"[!] Could not fetch longitudinal biomarker history: {e}")
+        history = []
+
     report_data = {
         "session_id": session_id,
         "evaluation_date": time.strftime("%B %d, %Y"),
         "patient": {
             "name": "De-identified",
-            "id": sessions[0]["patient_id"],
+            "id": patient_id,
             "condition": assessment["condition"],
             "clinician": clinicians[0]["display_name"],
         },
         "biomarkers": biomarkers,
+        "history": history,
         "utterances": [
             {"original_text": u["transcribed_text"], "repaired_text": u["corrected_text"] or u["transcribed_text"],
              "latency_ms": float(u["latency_ms"] or 0)}
@@ -872,11 +881,6 @@ def create_clinical_pdf_report(
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
 
-# ---------------------------------------------------------------------------
-# 3. LIVE CONVERSATION STREAMING WEBSOCKET (measured /api/rectify 2026-10-25, RTX 3050 on mains power, live Supabase,
-#    warm: the patient waits median 772 ms, p90 1190 ms; ~480 ms of it is the sign-in check and rate limit, two ~220 ms
-#    database round trips; ASR median ~140 ms. On battery the GPU is up to 10x slower)
-# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # Contact form (DESIGN.md, rule 45): no sign-in needed, so it is guarded by the CAPTCHA (verified here, on the
 # server), a hidden honeypot field, length limits, and limits per sender address and per network.
@@ -969,6 +973,11 @@ async def contact(req: ContactIn, request: Request):
     return {"saved": True, "emailed": emailed}
 
 
+# ---------------------------------------------------------------------------
+# 3. LIVE CONVERSATION STREAMING WEBSOCKET (measured /api/rectify 2026-10-25, RTX 3050 on mains power, live Supabase,
+#    warm: the patient waits median 772 ms, p90 1190 ms; ~480 ms of it is the sign-in check and rate limit, two ~220 ms
+#    database round trips; ASR median ~140 ms. On battery the GPU is up to 10x slower)
+# ---------------------------------------------------------------------------
 @app.websocket("/ws/rectify")
 async def websocket_speech_rectifier(websocket: WebSocket):
     """

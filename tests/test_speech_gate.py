@@ -15,9 +15,12 @@ t16 = np.arange(16000) / 16000
 
 def test_silence_noise_and_hum_are_not_speech():
     assert contains_speech(np.zeros(16000, dtype="float32")) is False
+    assert contains_speech((0.003 * rng.standard_normal(16000)).astype("float32")) is False  # below min_rms
     assert contains_speech((0.01 * rng.standard_normal(16000)).astype("float32")) is False   # quiet background noise
     assert contains_speech((0.1 * rng.standard_normal(16000)).astype("float32")) is False    # loud broadband noise
     assert contains_speech((0.3 * np.sin(2 * np.pi * 50 * t16)).astype("float32")) is False  # mains hum
+    fan_noise = (0.02 * np.sin(2 * np.pi * 60 * t16) + 0.01 * np.sin(2 * np.pi * 120 * t16) + 0.005 * rng.standard_normal(16000)).astype("float32")
+    assert contains_speech(fan_noise) is False                                                # fan & air conditioning hum
 
 
 def test_audio_too_short_to_hold_speech_is_rejected_without_error():

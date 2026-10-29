@@ -39,7 +39,9 @@ const more: MenuLink[] = [
 function Header() {
   return (
     <header className="relative z-20 mx-auto flex w-full max-w-[1120px] items-center justify-between gap-4 px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 md:px-10">
-      <Logo to="/home" />
+      <div className="lg:hidden">
+        <Logo to="/home" />
+      </div>
       <div className="flex items-center gap-2">
         {/* Phones: the theme lives on Me, so the header is the logo and the menu. */}
         <ThemeToggle className="hidden lg:inline-flex" />
@@ -52,7 +54,10 @@ function Header() {
 /** Desktop: a left rail. Phones: a bottom tab bar with Speak centred and larger. Active = fill and weight. */
 function Nav() {
   return (
-    <nav aria-label="Main" className="app-rail fixed inset-x-0 bottom-0 z-20 border-t border-card-line bg-surface pb-[env(safe-area-inset-bottom)] lg:inset-x-auto lg:top-0 lg:left-0 lg:w-28 lg:border-t-0 lg:bg-transparent lg:pt-28 lg:pb-0">
+    <nav aria-label="Main" className="app-rail fixed inset-x-0 bottom-0 z-20 border-t border-card-line bg-surface pb-[env(safe-area-inset-bottom)] lg:inset-x-auto lg:top-0 lg:left-0 lg:w-28 lg:border-t-0 lg:bg-transparent lg:pt-6 lg:pb-0">
+      <div className="hidden lg:flex lg:flex-col lg:items-center lg:mb-8 lg:pt-2">
+        <Logo to="/home" vertical />
+      </div>
       <ul className="mx-auto flex max-w-[640px] items-end justify-around px-1 lg:flex-col lg:items-stretch lg:gap-2 lg:px-3">
         {tabs.map((t) => (
           <li key={t.to} className="flex-1 lg:flex-none">

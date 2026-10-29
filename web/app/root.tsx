@@ -32,6 +32,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12262A" />
         <Meta />
         <Links />
+        {/* JSON-LD: helps search engines understand what the app is (DESIGN.md, rule 28). */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebApplication",
+              "name": "Epako Voice",
+              "description": "A communication and practice aid for people with dysarthria: it listens, corrects, and speaks back in a clear voice the person chose.",
+              "applicationCategory": "HealthApplication",
+              "operatingSystem": "Web",
+              "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
+              "inLanguage": "en",
+            }),
+          }}
+        />
       </head>
       <body>
         {children}

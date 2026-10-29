@@ -3,12 +3,22 @@ import { Link } from "react-router";
 import { SITE_NAME } from "~/lib/site";
 
 /** The tree mark and name; always a link home (rule 9). Signed-in screens pass to="/home". */
-export function Logo({ to = "/" }: { to?: string }) {
+export function Logo({
+  to = "/",
+  vertical = false,
+  className = "",
+}: {
+  to?: string;
+  vertical?: boolean;
+  className?: string;
+}) {
   return (
     <Link
       to={to}
       aria-label={`${SITE_NAME}, home`}
-      className="inline-flex min-h-12 items-center gap-2.5 rounded-input text-title text-ink no-underline"
+      className={`inline-flex min-h-12 items-center gap-2.5 rounded-input text-title text-ink no-underline ${
+        vertical ? "flex-col gap-1 text-center" : ""
+      } ${className}`}
     >
       <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false" className="size-8 shrink-0">
         <path d="M16 30V17" stroke="var(--ink)" strokeWidth="2.5" strokeLinecap="round" />
@@ -18,7 +28,9 @@ export function Logo({ to = "/" }: { to?: string }) {
         <circle cx="22.5" cy="15" r="5.5" fill="var(--fill)" />
         <circle cx="20" cy="8" r="2" fill="var(--primary)" />
       </svg>
-      <span className="whitespace-nowrap">{SITE_NAME}</span>
+      <span className={vertical ? "text-[0.75rem] font-semibold tracking-wide uppercase text-ink-soft" : "whitespace-nowrap"}>
+        {SITE_NAME}
+      </span>
     </Link>
   );
 }

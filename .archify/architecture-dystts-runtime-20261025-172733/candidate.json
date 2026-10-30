@@ -17,7 +17,7 @@
     { "id": "patient", "type": "external", "label": "Patient client", "sublabel": "browser / app", "tag": "anon key + JWT", "pos": [40, 200], "size": [140, 64],
       "sources": [{ "path": "docs/contract.md", "line": 57, "end_line": 67, "label": "API contract" }] },
     { "id": "auth", "type": "security", "label": "Supabase Auth", "sublabel": "JWT + Turnstile CAPTCHA", "pos": [290, 70], "size": [140, 64],
-      "sources": [{ "path": "src/api.py", "line": 138, "end_line": 149, "label": "verify_token" }, { "path": "CLAUDE.md", "line": 43, "label": "CAPTCHA on sign-in" }] },
+      "sources": [{ "path": "src/api.py", "line": 138, "end_line": 149, "label": "verify_token" }, { "path": "AGENTS.md", "line": 43, "label": "CAPTCHA on sign-in" }] },
     { "id": "hf", "type": "external", "label": "Hugging Face Hub", "sublabel": "Parakeet weights", "pos": [790, 70], "size": [140, 64],
       "sources": [{ "path": "src/speech_recognizer.py", "line": 28, "end_line": 42, "label": "pipeline(model=...)" }] },
     { "id": "guard", "type": "security", "label": "Auth + rate limit", "sublabel": "FastAPI dependency", "pos": [290, 200], "size": [140, 64],

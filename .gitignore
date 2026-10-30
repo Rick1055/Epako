@@ -15,5 +15,5 @@ logs/
 .DS_Store
 models/
 
-.claude/
+.tooling/
 graphify-out/

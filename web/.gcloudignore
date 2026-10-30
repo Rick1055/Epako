@@ -1,5 +1,10 @@
-node_modules
-build
-.git
+.gcloudignore
+.git/
+.gitignore
+node_modules/
+**/node_modules/**
+build/
+.cache/
+**/.cache/**
 .env
 *.md

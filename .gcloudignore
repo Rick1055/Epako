@@ -23,4 +23,5 @@ tests/
 *.md
 node_modules/
 **/node_modules/
-
+.cache/
+**/.cache/

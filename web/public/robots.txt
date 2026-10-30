@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+Allow: /help
+Allow: /sign-up
+Allow: /sign-in
+Allow: /clinician/sign-up
+Allow: /terms
+Allow: /privacy
+Allow: /accessibility
+
+# Protect authenticated patient & clinician sessions from web crawling
+Disallow: /home
+Disallow: /speak
+Disallow: /progress
+Disallow: /care
+Disallow: /me
+Disallow: /clinician/patient/
+Disallow: /setup
+
+Sitemap: https://epako-web-c2ufxqzwpa-uc.a.run.app/sitemap.xml

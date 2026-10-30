@@ -30,6 +30,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F8F4EC" />
         <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12262A" />
+        <meta name="google-site-verification" content="j8rGGPauGGCT4rzXp783R2Pk25rD1G44E1rwMqrVuog" />
         <Meta />
         <Links />
         {/* JSON-LD: helps search engines understand what the app is (DESIGN.md, rule 28). */}

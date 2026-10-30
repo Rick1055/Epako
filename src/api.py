@@ -727,6 +727,23 @@ def save_utterance(session_id: UUID, req: UtteranceIn, authorization: str = Head
     client = user_client(authorization.partition(" ")[2])
     patient_id = own_session(client, user.id, str(session_id))
     confirmed = words(req.shown_text) == words(req.final_text)
+
+    # Idempotency guard: deduplicate identical saves within a 5-second window
+    recent = service_client().table("session_utterances") \
+        .select("id, confirmed, created_at") \
+        .eq("session_id", str(session_id)) \
+        .eq("corrected_text", req.final_text) \
+        .order("created_at", desc=True) \
+        .limit(1) \
+        .execute().data
+    if recent:
+        try:
+            last_time = datetime.fromisoformat(recent[0]["created_at"])
+            if (datetime.now(timezone.utc) - last_time).total_seconds() < 5.0:
+                return {"confirmed": recent[0]["confirmed"], "reward": 0.0}
+        except Exception:
+            pass
+
     profile = client.table("patient_profiles").select("phonetic_corrections, vocabulary").eq("id", patient_id).execute().data[0]
     engine, vocab = FeedbackEngine(profile["phonetic_corrections"] or {}), Vocabulary(profile.get("vocabulary") or {})
     reward = engine.learn(req.raw_transcript, req.shown_text, req.final_text)

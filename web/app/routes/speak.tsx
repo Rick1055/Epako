@@ -75,6 +75,9 @@ export default function Speak() {
   const [said, setSaid] = useState<Said[]>([]);
   const [prompt, setPrompt] = useState<string | null>(null);
   const [promptPage, setPromptPage] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const startingMic = useRef(false);
   const mic = useRef<Mic | undefined>(undefined);
   const liveStream = useRef<LiveStream | undefined>(undefined);
   const convSocket = useRef<ConversationSocket | undefined>(undefined);
@@ -203,6 +206,8 @@ export default function Speak() {
 
   async function press() {
     if (state === "listening") return stop();
+    if (busy || startingMic.current) return;
+    startingMic.current = true;
     stopVoice.current?.();
     setNotice("");
     setResult(null);
@@ -219,6 +224,8 @@ export default function Speak() {
       setState("listening");
     } catch (e) {
       setNotice(MIC_HELP[e instanceof MicError ? e.problem : "unsupported"]);
+    } finally {
+      startingMic.current = false;
     }
   }
 
@@ -279,7 +286,9 @@ export default function Speak() {
   }
 
   async function confirm(finalText: string) {
-    if (!result) return;
+    if (!result || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     const done = (confirmed: boolean) => {
       setSaved(confirmed ? "yes" : "fixed");
       setSaid((list) => [{ text: finalText, audio: confirmed ? result.rectified_audio : null, confirmed }, ...list]);
@@ -298,6 +307,9 @@ export default function Speak() {
       // Stored; only this round of learning was lost.
       if (e instanceof ApiError && e.detail.startsWith("Your sentence was saved")) return done(finalText === result.repaired_text);
       setNotice(e instanceof ApiError ? e.message : "I couldn't save that just now. Please try again.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   }
 
@@ -524,7 +536,7 @@ export default function Speak() {
                         {usual
                           .filter((t) => t !== result.repaired_text)
                           .map((t) => (
-                            <Button key={t} variant="secondary" className="justify-start text-left" onClick={() => confirm(t)}>
+                            <Button key={t} variant="secondary" className="justify-start text-left" onClick={() => confirm(t)} disabled={saving || busy}>
                               {t}
                             </Button>
                           ))}
@@ -538,12 +550,13 @@ export default function Speak() {
                     onChange={(e) => setFixed(e.target.value)}
                     maxLength={500}
                     autoFocus={!usual.length}
+                    disabled={saving}
                   />
                   <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                    <Button type="submit" variant="secondary">
-                      Send
+                    <Button type="submit" variant="secondary" disabled={saving || busy}>
+                      {saving ? "Saving…" : "Send"}
                     </Button>
-                    <Button variant="quiet" onClick={press}>
+                    <Button variant="quiet" onClick={press} disabled={saving || busy}>
                       <Icon name="mic" className="size-5" />
                       Say it again instead
                     </Button>
@@ -551,10 +564,10 @@ export default function Speak() {
                 </form>
               ) : (
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                  <Button className="w-full sm:w-auto" onClick={() => confirm(result.repaired_text)}>
-                    Yes, that's right
+                  <Button className="w-full sm:w-auto" onClick={() => confirm(result.repaired_text)} disabled={saving || busy}>
+                    {saving ? "Saving…" : "Yes, that's right"}
                   </Button>
-                  <Button variant="secondary" onClick={() => setFixing(true)}>
+                  <Button variant="secondary" onClick={() => setFixing(true)} disabled={saving || busy}>
                     Not quite
                   </Button>
                 </div>

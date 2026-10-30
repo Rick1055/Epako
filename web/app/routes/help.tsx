@@ -8,8 +8,16 @@ import type { Route } from "./+types/help";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Help - Epako Voice" },
-    { name: "description", content: "Answers to the questions people ask most about Epako Voice, and how to reach us when you need a hand." },
+    { title: "Help & FAQ — Epako Voice Assistive Speech Support" },
+    {
+      name: "description",
+      content:
+        "Frequently asked questions, microphone troubleshooting, voice restoration setup, and user support for the Epako Voice assistive speech aid.",
+    },
+    {
+      name: "keywords",
+      content: "epako voice help, dysarthria app guide, microphone setup speech aid, voice restoration support",
+    },
   ];
 }
 

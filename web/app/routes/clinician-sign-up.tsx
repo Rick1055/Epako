@@ -4,8 +4,17 @@ import { AccountForm } from "./sign-up";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Clinician sign-up - Epako Voice" },
-    { name: "description", content: "Speech and language therapists and doctors: create an Epako Voice account to follow the practice your patients share with you." },
+    { title: "Clinician Portal Sign-Up — Epako Voice SLP Practice Platform" },
+    {
+      name: "description",
+      content:
+        "For Speech-Language Pathologists (SLPs), speech therapists, and neurologists: monitor patient practice sessions, review objective acoustic telemetry, and export clinical PDF reports.",
+    },
+    {
+      name: "keywords",
+      content:
+        "speech-language pathologist software, SLP dysarthria tool, speech therapy clinical portal, acoustic biomarker tracking, speech telemetry, motor speech assessment",
+    },
   ];
 }
 

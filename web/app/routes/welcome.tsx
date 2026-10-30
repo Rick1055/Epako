@@ -4,21 +4,33 @@ import type { Route } from "./+types/welcome";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Say it your way - Epako Voice" },
+    { title: "Epako Voice — Assistive Speech Recognition & Therapy Aid for Dysarthria" },
     {
       name: "description",
       content:
-        "Epako Voice listens, tidies up what you said, and says it back in a voice you choose. A gentle helper for everyday speaking and practice.",
+        "Epako Voice is an assistive communication and therapy aid for people with dysarthria (ALS, Parkinson's, CP, Stroke). Real-time speech recognition, voice restoration, and clinical bio-acoustic telemetry.",
+    },
+    {
+      name: "keywords",
+      content:
+        "dysarthria speech app, assistive speech recognition, dysarthria therapy, speech impairment tool, speech-language pathologist, ALS speech aid, Parkinson's voice practice, motor speech disorder",
+    },
+    { property: "og:title", content: "Epako Voice — Assistive Speech Recognition & Therapy Aid for Dysarthria" },
+    {
+      property: "og:description",
+      content:
+        "Real-time assistive speech recognition, neural voice restoration, and bio-acoustic progress tracking for people with motor speech conditions.",
     },
     // Structured data (DESIGN.md, rule 28): only facts shown on the page; no ratings, reviews or medical claims.
     {
       "script:ld+json": {
         "@context": "https://schema.org",
         "@graph": [
-          { "@type": "Organization", name: "Epako Voice" },
+          { "@type": "Organization", name: "Epako Voice", url: "https://epako-web-c2ufxqzwpa-uc.a.run.app" },
           {
             "@type": "WebSite",
             name: "Epako Voice",
+            url: "https://epako-web-c2ufxqzwpa-uc.a.run.app",
             description: "A helper for everyday speaking and practice for people with dysarthria. It isn't a medical device.",
           },
         ],

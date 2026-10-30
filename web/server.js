@@ -70,7 +70,7 @@ app.use((req, res, next) => {
         "media-src 'self' data: blob:", // the spoken voice arrives as a data: address
         "font-src 'self'",
         // blob: and data: are the 3D models' own embedded textures, read by the model loader.
-        `connect-src 'self' blob: data: https://${supabase} wss://${supabase} https://api.pwnedpasswords.com`,
+        `connect-src 'self' blob: data: https://${supabase} wss://${supabase} https://api.pwnedpasswords.com https://challenges.cloudflare.com`,
         "frame-src 'self' https://challenges.cloudflare.com",
         "worker-src 'self' blob:",
         "object-src 'none'",

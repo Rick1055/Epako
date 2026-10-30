@@ -1169,6 +1169,7 @@ async def websocket_speech_rectifier(websocket: WebSocket):
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
-    print("\n[+] Starting Epako Voice AI Speech Gateway on http://localhost:8000 ...")
-    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=False, log_level="info")
+    port = int(os.getenv("PORT", 8000))
+    print(f"\n[+] Starting Epako Voice AI Speech Gateway on port {port} ...")
+    uvicorn.run("api:app", host="0.0.0.0", port=port, reload=False, log_level="info")
 

@@ -11,9 +11,9 @@
 
 ---
 
-<div align="center">
-  <img src="./logo.svg" width="100" height="100" alt="Epako Emblem" style="background-color: #F5EFEB; border: 1.5px solid #2E6B4E; border-radius: 16px; padding: 4px;" />
-</div>
+<p align="center">
+  <img src="./banner.svg" width="100%" alt="Epako Banner" />
+</p>
 
 ## Overview
 

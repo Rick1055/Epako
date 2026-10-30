@@ -4,10 +4,13 @@ import { contact, SITE_NAME } from "~/lib/site";
 import { Logo } from "./Logo";
 
 const links = [
+  { to: "/guides/what-is-dysarthria", label: "Dysarthria Guide" },
+  { to: "/guides/acoustic-biomarkers", label: "Acoustic Biomarkers" },
+  { to: "/guides/speech-exercises", label: "Speech Exercises" },
+  { to: "/help", label: "Help" },
   { to: "/terms", label: "Terms" },
   { to: "/privacy", label: "Privacy" },
   { to: "/accessibility", label: "Accessibility" },
-  { to: "/help", label: "Help" },
 ];
 
 /** DESIGN.md, Footer: the same on every page; contact links are real mailto/tel links (rules 6, 11, 12, 16). */

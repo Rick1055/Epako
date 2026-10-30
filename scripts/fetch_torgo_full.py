@@ -1,7 +1,7 @@
 """
 Full TORGO download, extraction and audit (all four archives, every file).
 
-    python scripts/fetch_torgo_full.py download | list | extract [--keep a,b] [--dest] D:\\DysTTS_TORGO_dataset
+    python scripts/fetch_torgo_full.py download | list | extract [--keep a,b] [--dest] D:\TORGO_dataset
 
 Layout written under the destination:
     archives\\F.tar.bz2 ...      the original archives (kept, so extraction can be re-checked or redone)
@@ -233,7 +233,7 @@ if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("step", choices=["download", "list", "extract"])
-    ap.add_argument("--dest", default=r"D:\DysTTS_TORGO_dataset")
+    ap.add_argument("--dest", default=r"D:\TORGO_dataset")
     ap.add_argument("--keep", default=",".join(sorted(KEEP)), help="comma-separated folders to write (extract step)")
     args = ap.parse_args()
     {"download": lambda: download_all(args.dest), "list": lambda: list_all(args.dest),

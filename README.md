@@ -1,4 +1,9 @@
-# Epako Voice (DysTTS) 🎙️
+<p align="center">
+  <img src="./logo.svg" width="96" height="96" alt="EPAKO Logo" />
+</p>
+
+# EPAKO
+
 ### Assistive Neural Speech Recognition, Real-Time Intent Repair, and Acoustic Telemetry for Dysarthria
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)

@@ -29,7 +29,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Pre-download Piper neural voices into image so the container starts instantly
 RUN mkdir -p /app/models/piper && \
     python -m piper.download_voices en_US-ryan-medium --download-dir /app/models/piper && \
-    python -m piper.download_voices en_US-amy-medium --download-dir /app/models/piper
+    python -m piper.download_voices en_US-amy-medium --download-dir /app/models/piper && \
+    python -m piper.download_voices en_US-joe-medium --download-dir /app/models/piper && \
+    python -m piper.download_voices en_US-kusal-medium --download-dir /app/models/piper && \
+    python -m piper.download_voices en_US-lessac-medium --download-dir /app/models/piper && \
+    python -m piper.download_voices en_GB-alba-medium --download-dir /app/models/piper
 
 # Copy backend source code
 COPY src/ /app/src/

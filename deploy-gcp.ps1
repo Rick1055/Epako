@@ -81,8 +81,11 @@ if (-not $backendUrl) {
         --platform managed `
         --region $Region `
         --allow-unauthenticated `
-        --memory 4Gi `
-        --cpu 2 `
+        --memory 8Gi `
+        --cpu 4 `
+        --min-instances 1 `
+        --no-cpu-throttling `
+        --cpu-boost `
         --timeout 300 `
         --set-env-vars "SUPABASE_URL=$supabaseUrl,SUPABASE_KEY=$supabaseAnon,SUPABASE_SERVICE_ROLE_KEY=$supabaseService"
     

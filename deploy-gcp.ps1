@@ -108,7 +108,7 @@ try {
         --allow-unauthenticated `
         --memory 1Gi `
         --cpu 1 `
-        --set-env-vars "API_URL=$backendUrl,VITE_API_URL=$backendUrl,VITE_SUPABASE_URL=$supabaseUrl,VITE_SUPABASE_ANON_KEY=$supabaseAnon"
+        --set-env-vars "API_URL=$backendUrl,VITE_API_URL=$backendUrl,VITE_SUPABASE_URL=$supabaseUrl,VITE_SUPABASE_ANON_KEY=$supabaseAnon,VITE_TURNSTILE_SITE_KEY=0x4AAAAAAFkURGHLWXu2hUx_"
     
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Frontend deployment to Cloud Run failed."

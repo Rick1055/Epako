@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FDFBF7" />
+      <stop offset="100%" stop-color="#F3ECE2" />
+    </linearGradient>
+    <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#1A2B25" flood-opacity="0.08" />
+    </filter>
+  </defs>
+
+  <!-- Canvas Background -->
+  <rect width="1200" height="630" fill="url(#bgGrad)" />
+
+  <!-- Inner Card with subtle edge -->
+  <rect x="48" y="48" width="1104" height="534" rx="28" fill="#FFFFFF" stroke="#E2EEE7" stroke-width="2" filter="url(#cardShadow)" />
+
+  <!-- Tree Logo Mark (Centered top) -->
+  <g transform="translate(560, 100) scale(2.5)">
+    <path d="M16 30V17" stroke="#1A2B25" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M16 21l-4.5-3.5M16 19l4-3" stroke="#1A2B25" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="16" cy="11" r="8" fill="#3C8A66"/>
+    <circle cx="9.5" cy="15.5" r="5" fill="#3C8A66"/>
+    <circle cx="22.5" cy="15" r="5.5" fill="#3C8A66"/>
+    <circle cx="20" cy="8" r="2" fill="#2E6B4E"/>
+  </g>
+
+  <!-- App Name -->
+  <text x="600" y="225" text-anchor="middle" font-family="'Atkinson Hyperlegible Next', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="28" font-weight="700" fill="#2E6B4E" letter-spacing="1">
+    EPAKO VOICE
+  </text>
+
+  <!-- Hero Tagline -->
+  <text x="600" y="300" text-anchor="middle" font-family="'Atkinson Hyperlegible Next', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="44" font-weight="700" fill="#1A2B25" letter-spacing="-0.5">
+    Say it your way. We'll help it be heard.
+  </text>
+
+  <!-- Subtitle -->
+  <text x="600" y="355" text-anchor="middle" font-family="'Atkinson Hyperlegible Next', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="22" font-weight="400" fill="#3F534B">
+    Assistive neural speech recognition and voice restoration aid for dysarthria.
+  </text>
+
+  <!-- Pill Feature Highlights -->
+  <g transform="translate(600, 440)">
+    <!-- Pill 1 -->
+    <g transform="translate(-290, 0)">
+      <rect x="-130" y="-22" width="260" height="44" rx="22" fill="#F3F7F4" stroke="#6B7F77" stroke-width="1.2"/>
+      <text x="0" y="6" text-anchor="middle" font-family="'Atkinson Hyperlegible Next', -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="600" fill="#1A2B25">
+        Neural Dysarthric ASR
+      </text>
+    </g>
+    <!-- Pill 2 -->
+    <g transform="translate(0, 0)">
+      <rect x="-130" y="-22" width="260" height="44" rx="22" fill="#F3F7F4" stroke="#6B7F77" stroke-width="1.2"/>
+      <text x="0" y="6" text-anchor="middle" font-family="'Atkinson Hyperlegible Next', -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="600" fill="#1A2B25">
+        Voice Restoration Engine
+      </text>
+    </g>
+    <!-- Pill 3 -->
+    <g transform="translate(290, 0)">
+      <rect x="-130" y="-22" width="260" height="44" rx="22" fill="#F3F7F4" stroke="#6B7F77" stroke-width="1.2"/>
+      <text x="0" y="6" text-anchor="middle" font-family="'Atkinson Hyperlegible Next', -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="600" fill="#1A2B25">
+        Clinical Telemetry &amp; SLP
+      </text>
+    </g>
+  </g>
+
+  <!-- Footer link / domain -->
+  <text x="600" y="525" text-anchor="middle" font-family="'Atkinson Hyperlegible Next', -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#6B7F77" letter-spacing="0.5">
+    epako-web-c2ufxqzwpa-uc.a.run.app
+  </text>
+</svg>

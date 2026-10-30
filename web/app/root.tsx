@@ -31,6 +31,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F8F4EC" />
         <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12262A" />
         <meta name="google-site-verification" content="j8rGGPauGGCT4rzXp783R2Pk25rD1G44E1rwMqrVuog" />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Epako Voice" />
+        <meta property="og:title" content="Epako Voice — Say it your way. We'll help it be heard." />
+        <meta property="og:description" content="A communication and practice aid for people with dysarthria: it listens, corrects, and speaks back in a clear voice the person chose." />
+        <meta property="og:image" content="https://epako-web-c2ufxqzwpa-uc.a.run.app/og-image.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:image:alt" content="Epako Voice — Assistive Speech Recognition & Neural Voice Aid" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Epako Voice — Assistive Speech Aid" />
+        <meta name="twitter:description" content="A communication and practice aid for people with dysarthria: it listens, corrects, and speaks back in a clear voice the person chose." />
+        <meta name="twitter:image" content="https://epako-web-c2ufxqzwpa-uc.a.run.app/og-image.png" />
         <Meta />
         <Links />
         {/* JSON-LD: helps search engines understand what the app is (DESIGN.md, rule 28). */}

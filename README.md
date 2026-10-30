@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="./logo.svg" width="96" height="96" alt="EPAKO Logo" />
-</p>
-
 # EPAKO
 
 ### Assistive Neural Speech Recognition, Real-Time Intent Repair, and Acoustic Telemetry for Dysarthria
@@ -14,6 +10,10 @@
 [![Compliance](https://img.shields.io/badge/Compliance-DPDP_Act_2023-success.svg)](#patient-safety--privacy-measures)
 
 ---
+
+<p align="center">
+  <img src="./logo.svg" width="96" height="96" alt="Epako Emblem" />
+</p>
 
 ## Overview
 

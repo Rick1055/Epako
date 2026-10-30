@@ -17,9 +17,9 @@ class SupabaseManager:
         self.url = (supabase_url or os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
 
         if use_service_role:
-            self.key = (supabase_key or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY") or "").strip()
+            self.key = (supabase_key or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or "").strip()
         else:
-            self.key =(supabase_key or os.getenv("SUPABASE_KEY") or "").strip()
+            self.key = (supabase_key or os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
 
         if not self.url or not self.key:
             raise ValueError(

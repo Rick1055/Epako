@@ -187,7 +187,7 @@ def user_client(token: str):
     headers with each request; the shared connections carry no one's token."""
     from postgrest import SyncPostgrestClient
     from postgrest.constants import DEFAULT_POSTGREST_CLIENT_HEADERS
-    url, key = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/"), (os.getenv("SUPABASE_KEY") or "").strip()
+    url, key = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/"), (os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
     if not url or not key:
         raise HTTPException(status_code=503, detail="Database access is not configured.")
     return SyncPostgrestClient(f"{url}/rest/v1", headers={**DEFAULT_POSTGREST_CLIENT_HEADERS, "apikey": key, "Authorization": f"Bearer {token}"},
@@ -215,7 +215,7 @@ def fail(status: int, public: str, exc: Exception) -> HTTPException:
 def _auth_client():
     from supabase import create_client
     from supabase.lib.client_options import SyncClientOptions
-    url, key = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/"), (os.getenv("SUPABASE_KEY") or "").strip()
+    url, key = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/"), (os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
     if not url or not key:
         raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set")   # verify_token turns this into a 503
     return create_client(url, key, options=SyncClientOptions(httpx_client=_connections()))

@@ -84,7 +84,7 @@ if (-not $backendUrl) {
         --memory 4Gi `
         --cpu 2 `
         --timeout 300 `
-        --set-env-vars "SUPABASE_URL=$supabaseUrl,SUPABASE_SERVICE_ROLE_KEY=$supabaseService"
+        --set-env-vars "SUPABASE_URL=$supabaseUrl,SUPABASE_KEY=$supabaseAnon,SUPABASE_SERVICE_ROLE_KEY=$supabaseService"
     
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Backend deployment failed."

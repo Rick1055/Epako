@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 280" width="100%" height="280" fill="none">
+  <!-- Screen-wide cream background card with soft rounded corners and subtle border -->
+  <rect width="100%" height="100%" rx="24" fill="#F8F4EC" stroke="#E2EEE7" stroke-width="2"/>
+
+  <!-- Centered Epako Tree Emblem -->
+  <g transform="translate(552, 32) scale(3)">
+    <path d="M16 30V17" stroke="#1A2B25" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M16 21l-4.5-3.5M16 19l4-3" stroke="#1A2B25" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="16" cy="11" r="8" fill="#3C8A66"/>
+    <circle cx="9.5" cy="15.5" r="5" fill="#3C8A66"/>
+    <circle cx="22.5" cy="15" r="5.5" fill="#3C8A66"/>
+    <circle cx="20" cy="8" r="2" fill="#2E6B4E"/>
+  </g>
+
+  <!-- Friendly Brand Message -->
+  <text x="600" y="172" text-anchor="middle" font-family="'Atkinson Hyperlegible Next', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="26" font-weight="700" fill="#1A2B25" letter-spacing="-0.3">
+    Say it your way. We'll help it be heard.
+  </text>
+  <text x="600" y="210" text-anchor="middle" font-family="'Atkinson Hyperlegible Next', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="17" font-weight="400" fill="#3F534B">
+    Go at your own pace — there's no rush here.
+  </text>
+</svg>

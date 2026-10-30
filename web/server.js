@@ -10,13 +10,14 @@ import { createProxyMiddleware } from "http-proxy-middleware";
 const DEVELOPMENT = process.argv.includes("--dev");
 // Set here, not in the npm script, so it works in every shell; Express and React read it after this line.
 process.env.NODE_ENV = DEVELOPMENT ? "development" : "production";
-const HOST = process.env.HOST || "127.0.0.1";
+const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number.parseInt(process.env.PORT || "3000");
-const API_URL = process.env.API_URL || "http://127.0.0.1:8000";
+const API_URL = process.env.API_URL || process.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 const isApiPath = (path) => path.startsWith("/api/") || path.startsWith("/ws/") || path === "/health";
 const api = createProxyMiddleware({
   target: API_URL,
+  changeOrigin: true,
   pathFilter: isApiPath,
   xfwd: true,
   on: {

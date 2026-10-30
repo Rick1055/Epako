@@ -14,11 +14,10 @@ import librosa
 import numpy as np
 
 # Stage 1 (Energy Floor) & Stage 2 (VAD Structure Gate)
-# MIN_RMS rejects digital silence, static, or faint line hiss below -46 dBFS.
-# THRESHOLD = 0.35 rejects low-level ambient fan/AC hum (typically 0.05-0.28) while preserving
-# soft dysarthric vocalizations (typically 0.85-0.999).
-MIN_RMS = 0.005
-THRESHOLD = 0.35
+# MIN_RMS = 0.001 rejects digital silence below -60 dBFS while allowing soft dysarthric speech.
+# THRESHOLD = 0.20 is calibrated on TORGO benchmark to preserve quiet and slurred vocalizations.
+MIN_RMS = 0.001
+THRESHOLD = 0.20
 _WINDOW, _CONTEXT = 512, 64   # the model reads 32 ms windows at 16 kHz plus the last 64 samples of the previous one
 
 

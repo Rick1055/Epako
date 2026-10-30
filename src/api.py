@@ -436,7 +436,9 @@ async def rectify_speech(
         raise HTTPException(status_code=400, detail="Audio sample too short (<100ms).")
 
     # 0. Silence and noise must never become a sentence: the recogniser invents one if asked
-    if not await asyncio.to_thread(contains_speech, audio):
+    has_speech = await asyncio.to_thread(contains_speech, audio)
+    print(f"[/api/rectify] Audio: {len(audio)} samples ({len(audio)/16000:.2f}s), speech_detected={has_speech}")
+    if not has_speech:
         return {
             "success": True,
             "speech_detected": False,
@@ -458,16 +460,17 @@ async def rectify_speech(
     raw_transcript = asr_res.get("text", "").strip()
     asr_latency = asr_res.get("latency_ms", 0.0)
 
-    # Rejection of low-confidence hallucination on ambient noise
+    # Rejection of low-confidence hallucination on ambient noise (lowered to 0.15 to preserve dysarthric speech)
     words = asr_res.get("words")
     avg_conf = (sum(w["confidence"] for w in words) / len(words)) if (words and len(words) > 0) else (0.0 if not raw_transcript else 1.0)
-    if words and avg_conf < 0.30:
+    if words and avg_conf < 0.15:
         raw_transcript = "" 
 
     # 2. Intent & Dysfluency Repair
     repair_res = await asyncio.to_thread(repair_eng.repair, raw_transcript, asr_res.get("words"))   # snapping calls espeak: seconds on a cold cache
     repaired_text = repair_res.get("repaired_text", raw_transcript)
     repair_latency = repair_res.get("latency_ms", 1.0)
+    print(f"[/api/rectify] Transcribed: {raw_transcript!r} (conf={avg_conf:.2f}) -> Repaired: {repaired_text!r}")
 
     # 3. Neural Voice Synthesis
     synth_latency = 0.0
@@ -1122,7 +1125,7 @@ async def websocket_speech_rectifier(websocket: WebSocket):
                 raw_text = asr_res.get("text", "").strip()
                 words = asr_res.get("words")
                 avg_conf = (sum(w["confidence"] for w in words) / len(words)) if (words and len(words) > 0) else (0.0 if not raw_text else 1.0)
-                if not raw_text or (words and avg_conf < 0.30):
+                if not raw_text or (words and avg_conf < 0.15):
                     await websocket.send_json({"type": "no_speech", "reason": "low_confidence", "message": "Low ambient sound or silence ignored"})
                     continue
 

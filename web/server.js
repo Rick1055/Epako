@@ -2,6 +2,7 @@
 // It renders pages and forwards /api/*, /ws/* and /health to the speech API, so the browser sees a single origin (no CORS).
 // /health lets the app retry while the API wakes up ("Epako is waking up").
 import { randomBytes } from "node:crypto";
+import path from "node:path";
 
 import compression from "compression";
 import express from "express";
@@ -86,16 +87,25 @@ app.use((req, res, next) => {
 app.use(api);
 
 // For search engines and AI crawlers (DESIGN.md, rules 28 and 35): the public pages only; nothing signed-in is listed.
-const PUBLIC_PAGES = ["/", "/sign-up", "/sign-in", "/help", "/terms", "/privacy", "/accessibility", "/clinician/sign-up"];
+const PUBLIC_PAGES = [
+  "/",
+  "/guides/what-is-dysarthria",
+  "/guides/acoustic-biomarkers",
+  "/guides/speech-exercises",
+  "/sign-up",
+  "/sign-in",
+  "/help",
+  "/terms",
+  "/privacy",
+  "/accessibility",
+  "/clinician/sign-up",
+];
 const origin = (req) => `${req.headers["x-forwarded-proto"] === "https" ? "https" : req.protocol}://${req.headers["x-forwarded-host"] ?? req.headers.host}`;
 app.get("/robots.txt", (req, res) => {
-  res.type("text/plain").send(
-    ["User-agent: *", "Allow: /", ...["/home", "/speak", "/voice", "/progress", "/care", "/me", "/setup", "/clinician/"].map((p) => `Disallow: ${p}`), "", `Sitemap: ${origin(req)}/sitemap.xml`, ""].join("\n"),
-  );
+  res.sendFile(path.resolve("public/robots.txt"));
 });
 app.get("/sitemap.xml", (req, res) => {
-  const urls = PUBLIC_PAGES.map((p) => `  <url><loc>${origin(req)}${p}</loc></url>`).join("\n");
-  res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
+  res.sendFile(path.resolve("public/sitemap.xml"));
 });
 app.get("/llms.txt", (req, res) => {
   res.type("text/plain").send(

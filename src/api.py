@@ -22,6 +22,7 @@ import numpy as np
 import librosa
 import soundfile as sf
 import local_tts
+from prompt_guard import check_prompt_injection
 from speech_gate import contains_speech, StreamVAD, START_P, STOP_P, END_QUIET_S, PRE_ROLL_S, MIN_SPEECH_S
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Request, Response, Header, Depends
@@ -359,6 +360,14 @@ class VoiceProfile(BaseModel):
 
 class VoiceSculptRequest(VoiceProfile):
     sample_phrase: str = Field(default="The morning sun gently illuminates the quiet cedar grove.", max_length=300)
+
+    @field_validator("sample_phrase")
+    @classmethod
+    def sanitize_sample_phrase(cls, v: str) -> str:
+        blocked, reason = check_prompt_injection(v)
+        if blocked:
+            raise ValueError(f"Invalid phrase: {reason}")
+        return v
 
 
 class ClinicalPdfReportRequest(BaseModel):

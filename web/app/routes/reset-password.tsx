@@ -41,8 +41,17 @@ export default function ResetPassword() {
     if (!ok) return setError("Your password needs at least 12 characters and shouldn't be one that's been in a data leak.");
     setBusy(true);
     const { data, error } = await supabase().auth.updateUser({ password });
+    if (error) {
+      setBusy(false);
+      return setError(authMessage(error));
+    }
+    // Invalidate all other active sessions across other devices on password change.
+    try {
+      await supabase().auth.signOut({ scope: "others" });
+    } catch {
+      // Non-blocking if other sessions were already cleared
+    }
     setBusy(false);
-    if (error) return setError(authMessage(error));
     navigate(await homeFor(data.user.id));
   }
 
@@ -54,7 +63,7 @@ export default function ResetPassword() {
       <div className="mx-auto max-w-[1120px] px-5 pb-18 md:px-10">
         {ready === false ? (
           <div className="max-w-[34rem]">
-            <Message tone="error">This link has expired or was already used. Links work once, for an hour.</Message>
+            <Message tone="error">This link has expired or was already used. Links work once, for 15 minutes.</Message>
             <Link to="/forgot-password" className="mt-6 inline-flex min-h-12 items-center font-semibold underline underline-offset-4">
               Send me a new link
             </Link>

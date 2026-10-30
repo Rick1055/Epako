@@ -46,7 +46,7 @@ export default function ForgotPassword() {
         {sent ? (
           <div className="max-w-[34rem]">
             {/* Same words whether or not the address has an account, so nobody can find out who uses the app. */}
-            <Message tone="success">If there's an account for {email}, a link is on its way. It works for an hour.</Message>
+            <Message tone="success">If there's an account for {email}, a link is on its way. It works for 15 minutes.</Message>
             <Link to="/sign-in" className="mt-6 inline-flex min-h-12 items-center font-semibold underline underline-offset-4">
               Back to sign in
             </Link>

@@ -1,5 +1,3 @@
-import { Link } from "react-router";
-
 import { ButtonLink } from "~/components/Button";
 import { EntryPage } from "~/components/EntryPage";
 import type { Route } from "./+types/welcome";
@@ -42,17 +40,15 @@ export default function Welcome() {
           <ButtonLink to="/sign-up" className="w-full sm:w-auto">
             Get started
           </ButtonLink>
+          <ButtonLink to="/clinician/sign-up" variant="secondary" className="w-full sm:w-auto">
+            I'm a clinician
+          </ButtonLink>
           <ButtonLink to="/sign-in" variant="quiet">
             Sign in
           </ButtonLink>
         </div>
         <p className="mt-8 text-ink-soft">
           A helper for everyday speaking and practice. It isn't a medical device, and it doesn't replace your clinician.
-        </p>
-        <p className="mt-4">
-          <Link to="/clinician/sign-up" className="inline-flex min-h-12 items-center underline underline-offset-4">
-            I'm a clinician
-          </Link>
         </p>
       </div>
     </EntryPage>

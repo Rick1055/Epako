@@ -2,6 +2,8 @@
 
 ### Assistive Neural Speech Recognition, Real-Time Intent Repair, and Acoustic Telemetry for Dysarthria
 
+[![Live Website](https://img.shields.io/badge/Live_Website-epako--web.run.app-2D5A46?style=for-the-badge&logo=googlecloud&logoColor=white)](https://epako-web-c2ufxqzwpa-uc.a.run.app)
+[![API Gateway](https://img.shields.io/badge/API_Gateway-Cloud_Run-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://epako-backend-c2ufxqzwpa-uc.a.run.app/health)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
 [![React Router](https://img.shields.io/badge/Frontend-React_Router_v7-E0234E.svg)](https://reactrouter.com/)
@@ -14,6 +16,16 @@
 <p align="center">
   <img src="./banner.svg" width="100%" alt="Epako Banner" />
 </p>
+
+## Live Deployment & Access
+
+| Service | Environment | Endpoint URL | Status |
+| :--- | :--- | :--- | :--- |
+| **Epako Web Application** | Google Cloud Run (Managed) | [**https://epako-web-c2ufxqzwpa-uc.a.run.app**](https://epako-web-c2ufxqzwpa-uc.a.run.app) | `Serving 100% Traffic` |
+| **Inference Gateway API** | Google Cloud Run (8 GB / 4 vCPU) | [**https://epako-backend-c2ufxqzwpa-uc.a.run.app**](https://epako-backend-c2ufxqzwpa-uc.a.run.app) | `Healthy` ([/health](https://epako-backend-c2ufxqzwpa-uc.a.run.app/health)) |
+| **Database & Auth Vault** | Supabase Postgres (RLS enabled) | `mdaqikxrsyacuttnxpmr.supabase.co` | `Active` |
+
+---
 
 ## Overview
 
@@ -177,14 +189,55 @@ graph LR
 
 The acoustic models, synthetic data pipelines, and validation suites in Epako Voice utilize the following open research corpora:
 
-| Dataset | Description | Official Access / Download Link |
+| Dataset | Description | Official Access & Direct Download Links |
 | :--- | :--- | :--- |
-| **TORGO Speech Corpus** | Acoustic and 3D articulatory speech corpus from 8 dysarthric and 7 control speakers (Cerebral Palsy and ALS). | [University of Toronto TORGO Repository](http://www.cs.toronto.edu/~compling/Research/TORGO/torgo.html)<br>[Kaggle Verified Mirror](https://www.kaggle.com/datasets/iamhungundji/torgo-dysarthria-speech-dataset) |
-| **UASpeech Database** | 19 speakers with cerebral palsy uttering isolated words across 4 severity levels (University of Illinois). | [UIUC Speech & Speech Technology (SST)](http://isle.illinois.edu/sst/data/UASpeech/) |
-| **Speech Accessibility Project (SAP)** | Large-scale multi-pathology dysarthric speech corpus (Parkinson's, ALS, CP, Stroke, Down Syndrome). | [Speech Accessibility Project Portal](https://speechaccessibilityproject.beckman.illinois.edu/) |
-| **Parakeet-TDT 0.6B Checkpoint** | FastConformer acoustic model checkpoint trained on Speech Accessibility Project data. | [Hugging Face (`dys-asr/parakeet-tdt-0.6b-unconstrained-soup`)](https://huggingface.co/dys-asr/parakeet-tdt-0.6b-unconstrained-soup) |
-| **Piper Neural Voices** | Lightweight ONNX VITS speech synthesis models. | [Rhasspy Piper Models Repository](https://huggingface.co/rhasspy/piper-voices) |
-| **Silero VAD** | Fast, enterprise-grade Voice Activity Detection ONNX model. | [Silero VAD GitHub Repository](https://github.com/snakers4/silero-vad) |
+| **TORGO Speech Corpus** | Acoustic and 3D articulatory speech corpus from 8 dysarthric and 7 control speakers (Cerebral Palsy and ALS). | • **Direct Archive Directory**: [cs.toronto.edu/~complingweb/data/TORGO/](https://www.cs.toronto.edu/~complingweb/data/TORGO/)<br>• [Female Dysarthric (`F.tar.bz2`)](https://www.cs.toronto.edu/~complingweb/data/TORGO/F.tar.bz2)<br>• [Female Control (`FC.tar.bz2`)](https://www.cs.toronto.edu/~complingweb/data/TORGO/FC.tar.bz2)<br>• [Male Dysarthric (`M.tar.bz2`)](https://www.cs.toronto.edu/~complingweb/data/TORGO/M.tar.bz2)<br>• [Male Control (`MC.tar.bz2`)](https://www.cs.toronto.edu/~complingweb/data/TORGO/MC.tar.bz2)<br>• **Research Portal**: [University of Toronto TORGO Repository](http://www.cs.toronto.edu/~compling/Research/TORGO/torgo.html)<br>• **Kaggle Mirror**: [Kaggle Verified TORGO Dataset](https://www.kaggle.com/datasets/iamhungundji/torgo-dysarthria-speech-dataset) |
+| **UASpeech Database** | 19 speakers with cerebral palsy uttering isolated words across 4 severity levels (University of Illinois). | • **Official Portal**: [UIUC Speech & Speech Technology (SST) Laboratory](http://isle.illinois.edu/sst/data/UASpeech/) |
+| **Speech Accessibility Project (SAP)** | Large-scale multi-pathology dysarthric speech corpus (Parkinson's, ALS, CP, Stroke, Down Syndrome). | • **Project Portal**: [Speech Accessibility Project (Beckman Institute)](https://speechaccessibilityproject.beckman.illinois.edu/) |
+| **Parakeet-TDT 0.6B Checkpoint** | FastConformer acoustic model checkpoint trained on Speech Accessibility Project data. | • **Hugging Face Model**: [`dys-asr/parakeet-tdt-0.6b-unconstrained-soup`](https://huggingface.co/dys-asr/parakeet-tdt-0.6b-unconstrained-soup) |
+| **Piper Neural Voices** | Lightweight ONNX VITS speech synthesis models with multi-accent support. | • **Model Repository**: [Rhasspy Piper Voices (Hugging Face)](https://huggingface.co/rhasspy/piper-voices) |
+| **Silero VAD** | Fast, enterprise-grade Voice Activity Detection ONNX model. | • **GitHub Repository**: [snakers4/silero-vad](https://github.com/snakers4/silero-vad) |
+
+### Automated Dataset Ingestion Scripts
+The repository includes automated scripts to download, verify, and extract clinical corpora:
+```bash
+# Download and audit the complete TORGO corpus (all 4 archives, CRC block validation)
+python scripts/fetch_torgo_full.py download --dest data/torgo
+
+# Download a lightweight sample subset of TORGO for rapid smoke-testing
+python scripts/fetch_mini_torgo.py --count 50 --dest data/torgo_mini
+
+# Run benchmark evaluation across dysarthric speakers
+python scripts/eval_torgo.py --dataset-dir data/torgo
+```
+
+---
+
+## Recent Updates & Clinical Hardening
+
+Recent production engineering and clinical upgrades deployed to the platform:
+
+1. **Acoustic Ingestion Re-calibrated for Dysarthria**:
+   - Calibrated Silero VAD threshold to `0.20` to prevent premature cutoff during slow, effortful articulatory transitions.
+   - Lowered RMS energy floor to `0.001` to accept soft, breathy phonation without false silence rejections.
+   - Tuned word confidence acceptance threshold to `0.15` for severely impaired speech input.
+
+2. **Tremor-Resilient Utterance Pipeline & Idempotency**:
+   - Implemented an atomic frontend submission lock (`savingRef`) and a 5-second sliding window backend idempotency cache to eliminate duplicate or triple registrations caused by involuntary motor tremors or rapid repeated taps.
+
+3. **Cloudflare Turnstile Bot Defense & Resilient Authentication**:
+   - Integrated zero-friction Cloudflare Turnstile verification on Sign-Up and Sign-In flows to protect auth endpoints without requiring patients to complete inaccessible visual puzzle CAPTCHAs.
+   - Hardened Content Security Policy (CSP) headers across frontend and API gateways.
+
+4. **Cloud Run Production Scalability**:
+   - High-throughput deployment on Google Cloud Run (`us-central1`) configured with 8 GiB RAM, 4 vCPUs, and 1 persistent minimum instance to eliminate cold-start latency.
+   - Pre-downloaded all 6 Piper neural voice palette models into container image for immediate, zero-network-dependency voice synthesis.
+
+5. **Distraction-Free Accessible UX**:
+   - Applied cross-browser invisible scrollbars across Chrome, Edge, Safari, and Firefox to maximize screen real estate for motor-fatigued patients while preserving 100% of native mouse wheel, trackpad, and touch swipe scrolling.
+
+6. **Educational Clinical Guides & SEO**:
+   - Integrated patient and clinician guides covering dysarthria etiology, therapeutic speech exercises, and bio-acoustic biomarkers with dynamic sitemaps and schema.org structured data.
 
 ---
 

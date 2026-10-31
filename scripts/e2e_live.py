@@ -9,7 +9,7 @@ saved voice -> session -> rectify (HTTP and WebSocket) -> the patient confirms a
 token (a script cannot solve one, so the deletion itself is covered by tests/test_core.py).
 
 Throwaway accounts (deleted at the end even on failure). The final corrected speech is written to
-outputs/e2e_corrected_speech.wav. Exit code 1 if any step fails. Needs .env and data/TORGO (scripts/fetch_mini_torgo.py).
+outputs/e2e_corrected_speech.wav. Exit code 1 if any step fails. Needs .env and data/TORGO (scripts/fetch_torgo_full.py).
 Use 127.0.0.1, not localhost: on Windows localhost adds ~2 s per connection.
 """
 import argparse

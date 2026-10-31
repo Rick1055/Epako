@@ -204,11 +204,11 @@ The repository includes automated scripts to download, verify, and extract clini
 # Download and audit the complete TORGO corpus (all 4 archives, CRC block validation)
 python scripts/fetch_torgo_full.py download --dest data/torgo
 
-# Download a lightweight sample subset of TORGO for rapid smoke-testing
-python scripts/fetch_mini_torgo.py --count 50 --dest data/torgo_mini
+# Extract prompts and speech audio (wav_headMic / wav_arrayMic) with integrity checks
+python scripts/fetch_torgo_full.py extract --dest data/torgo
 
 # Run benchmark evaluation across dysarthric speakers
-python scripts/eval_torgo.py --dataset-dir data/torgo
+python scripts/eval_torgo.py data/torgo
 ```
 
 ---

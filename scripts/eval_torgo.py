@@ -3,8 +3,7 @@ Zero-shot evaluation of the whole pipeline (speech gate -> recogniser -> repair)
 
     python scripts/eval_torgo.py [data dir] [--mic wav_headMic] [--limit N]
 
-A data dir holding manifest.csv is the full TORGO from fetch_torgo_full.py; otherwise it is the mini layout from
-fetch_mini_torgo.py. Nothing here is trained on TORGO, so every speaker is held out. WER is total errors / total
+A data dir holding manifest.csv is from fetch_torgo_full.py. Nothing here is trained on TORGO, so every speaker is held out. WER is total errors / total
 reference words with 95% bootstrap intervals over utterances. An utterance the gate refuses is scored as an empty
 transcript: that is what the patient would get. Rows are saved as they finish, so a stopped run resumes.
 """

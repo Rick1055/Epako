@@ -15,7 +15,9 @@
 ---
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Rick1055/Epako/main/banner.svg" width="100%" alt="Epako Banner" />
+  <a href="https://htmlpreview.github.io/?https://github.com/Rick1055/Epako/blob/main/.archify/architecture-epako-runtime-20261025-172733/epako-runtime.html">
+    <img src="https://raw.githubusercontent.com/Rick1055/Epako/main/architecture.png" width="100%" alt="Epako Architecture Banner" />
+  </a>
 </p>
 
 ## Live Deployment & Access
@@ -63,6 +65,12 @@ Epako Voice consists of a modern SSR web application, a high-throughput Python F
 > • 🌐 **[Open Interactive Architecture (Live Web View)](https://htmlpreview.github.io/?https://github.com/Rick1055/Epako/blob/main/.archify/architecture-epako-runtime-20261025-172733/epako-runtime.html)**  
 > • 📁 **Repository File**: [`epako-runtime.html`](.archify/architecture-epako-runtime-20261025-172733/epako-runtime.html)  
 > *(Alternatively, open `.archify/architecture-epako-runtime-20261025-172733/epako-runtime.html` locally in any web browser to interact with the full SVG node map).*
+
+<p align="center">
+  <a href="https://htmlpreview.github.io/?https://github.com/Rick1055/Epako/blob/main/.archify/architecture-epako-runtime-20261025-172733/epako-runtime.html">
+    <img src="https://raw.githubusercontent.com/Rick1055/Epako/main/architecture.png" width="100%" alt="Epako Runtime Architecture Diagram" />
+  </a>
+</p>
 
 ```mermaid
 flowchart TB

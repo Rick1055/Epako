@@ -4,6 +4,7 @@
 
 [![Live Website](https://img.shields.io/badge/Live_Website-epako--web.run.app-2D5A46?style=for-the-badge&logo=googlecloud&logoColor=white)](https://epako-web-c2ufxqzwpa-uc.a.run.app)
 [![API Gateway](https://img.shields.io/badge/API_Gateway-Cloud_Run-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://epako-backend-c2ufxqzwpa-uc.a.run.app/health)
+[![Interactive Architecture](https://img.shields.io/badge/Architecture-Interactive_Explorer-1A2B25?style=for-the-badge&logo=diagramsdotnet&logoColor=white)](https://htmlpreview.github.io/?https://github.com/Rick1055/Epako/blob/main/.archify/architecture-epako-runtime-20261025-172733/epako-runtime.html)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
 [![React Router](https://img.shields.io/badge/Frontend-React_Router_v7-E0234E.svg)](https://reactrouter.com/)
@@ -55,6 +56,12 @@ Epako Voice solves these challenges with an integrated three-pillar architecture
 ## End-to-End System Architecture
 
 Epako Voice consists of a modern SSR web application, a high-throughput Python FastAPI gateway, on-device neural acoustic pipelines, and a secure Supabase persistence layer.
+
+> 🔍 **Interactive Architecture & Flow Explorer**:  
+> You can open the interactive runtime architecture diagram to explore component relationships, inspect data flows, and trace execution lenses in detail:  
+> • 🌐 **[Open Interactive Architecture (Live Web View)](https://htmlpreview.github.io/?https://github.com/Rick1055/Epako/blob/main/.archify/architecture-epako-runtime-20261025-172733/epako-runtime.html)**  
+> • 📁 **Repository File**: [`epako-runtime.html`](.archify/architecture-epako-runtime-20261025-172733/epako-runtime.html)  
+> *(Alternatively, open `.archify/architecture-epako-runtime-20261025-172733/epako-runtime.html` locally in any web browser to interact with the full SVG node map).*
 
 ```mermaid
 flowchart TB

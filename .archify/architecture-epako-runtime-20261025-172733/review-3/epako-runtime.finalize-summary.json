@@ -6,12 +6,12 @@
   "type": "architecture",
   "quality": "showcase",
   "specification": {
-    "path": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\candidate.json",
+    "path": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-epako-runtime-20261025-172733\\candidate.json",
     "sha256": "61fc076ce82b08ad9828d67e4d767e01ed3a120f5962230b8c6415a739489c18",
     "bytes": 8222
   },
   "artifact": {
-    "path": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\dystts-runtime.html",
+    "path": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-epako-runtime-20261025-172733\\epako-runtime.html",
     "sha256": "6cb5aa7653857203c6f965944f150c472149b85b7f819c37127d3744d8d57bd5",
     "bytes": 862717
   },
@@ -28,9 +28,9 @@
     "truncated": false
   },
   "evidence": {
-    "receipt": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\review-2\\dystts-runtime.finalize.json",
-    "summaryReceipt": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\review-2\\dystts-runtime.finalize-summary.json",
-    "browserCheckReceipt": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\review-2\\dystts-runtime.browser-check.json"
+    "receipt": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-epako-runtime-20261025-172733\\review-3\\epako-runtime.finalize.json",
+    "summaryReceipt": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-epako-runtime-20261025-172733\\review-3\\epako-runtime.finalize-summary.json",
+    "browserCheckReceipt": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-epako-runtime-20261025-172733\\review-3\\epako-runtime.browser-check.json"
   },
   "update": {
     "status": "current",
@@ -43,7 +43,7 @@
     "noticeText": null
   },
   "visualReview": "not-requested",
-  "durationMs": 8927,
+  "durationMs": 7752,
   "browserCheck": {
     "requested": true,
     "ran": true

@@ -4,8 +4,8 @@
   "status": "current",
   "command": "deliver",
   "type": "architecture",
-  "input": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\candidate.json",
-  "output": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\dystts-runtime.html",
+  "input": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-epako-runtime-20261025-172733\\candidate.json",
+  "output": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-epako-runtime-20261025-172733\\epako-runtime.html",
   "specification": {
     "sha256": "493d6b70a5a01b4ecf07e8ce59e4ceef781691c5dbb084ec756df7fdd9af7fdb",
     "bytes": 8353

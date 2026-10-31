@@ -6,11 +6,11 @@
   "status": "pass",
   "visualReview": "not-requested",
   "provenance": "current",
-  "deliveryReceiptId": "9753be2a-33d1-4071-a0b3-7fe2297cb594",
+  "deliveryReceiptId": "8f64e324-f9a2-41c2-8ab6-591e8d2dc6b7",
   "artifact": {
-    "path": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\dystts-runtime.html",
-    "sha256": "e7f0957bb00944ec79a2f9583deaae81f799b0ef3f69c91ec6e65135a919c51e",
-    "bytes": 862856
+    "path": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-epako-runtime-20261025-172733\\epako-runtime.html",
+    "sha256": "6cb5aa7653857203c6f965944f150c472149b85b7f819c37127d3744d8d57bd5",
+    "bytes": 862717
   },
   "state": {
     "detail": "read",
@@ -715,8 +715,8 @@
     "contactSheet": null
   },
   "sidecars": {
-    "directory": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-dystts-runtime-20261025-172733\\review-4",
-    "receipt": "dystts-runtime.browser-check.json",
+    "directory": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-epako-runtime-20261025-172733\\review-3",
+    "receipt": "epako-runtime.browser-check.json",
     "files": []
   }
 }

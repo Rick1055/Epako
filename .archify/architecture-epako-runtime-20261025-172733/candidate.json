@@ -2,12 +2,12 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "DysTTS runtime: speech in, corrected voice out",
-    "output": ".archify/architecture-dystts-runtime-20261025-172733/dystts-runtime.html",
+    "title": "Epako runtime: speech in, corrected voice out",
+    "output": ".archify/architecture-epako-runtime-20261025-172733/epako-runtime.html",
     "quality_profile": "showcase",
     "locale": "en",
     "repository": {
-      "url": "https://github.com/Rick1055/DysTTS.git",
+      "url": "https://github.com/Rick1055/Epako.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "e5cc045382f12127eb50b573dad63a2e0b1d8c7d"

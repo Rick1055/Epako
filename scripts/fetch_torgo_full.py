@@ -1,4 +1,4 @@
-"""
+r"""
 Full TORGO download, extraction and audit (all four archives, every file).
 
     python scripts/fetch_torgo_full.py download | list | extract [--keep a,b] [--dest] D:\TORGO_dataset

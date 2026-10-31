@@ -16,9 +16,16 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "src"))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+src_dir = os.path.join(ROOT, "src")
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
-from eval_metrics import summarize
+try:
+    from src.eval_metrics import summarize
+except ImportError:
+    from eval_metrics import summarize
 
 
 def manifest_samples(root, mic):
@@ -37,10 +44,16 @@ def main(data_dir, mic, limit):
     import librosa
     import soundfile as sf
 
-    from data_ingestion import TorgoDataset
-    from intent_repair import IntentRepair
-    from speech_gate import contains_speech
-    from speech_recognizer import DysarthriaSpeechRecognizer
+    try:
+        from src.data_ingestion import TorgoDataset
+        from src.intent_repair import IntentRepair
+        from src.speech_gate import contains_speech
+        from src.speech_recognizer import DysarthriaSpeechRecognizer
+    except ImportError:
+        from data_ingestion import TorgoDataset
+        from intent_repair import IntentRepair
+        from speech_gate import contains_speech
+        from speech_recognizer import DysarthriaSpeechRecognizer
 
     if os.path.exists(os.path.join(data_dir, "manifest.csv")):
         samples = manifest_samples(data_dir, mic)

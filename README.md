@@ -55,7 +55,11 @@ Epako Voice solves these challenges with an integrated three-pillar architecture
 
 ## End-to-End System Architecture
 
-[![Interactive Architecture](https://img.shields.io/badge/Architecture-Interactive_Explorer-1A2B25?style=for-the-badge&logo=diagramsdotnet&logoColor=white)](https://htmlpreview.github.io/?https://github.com/Rick1055/Epako/blob/main/.archify/architecture-epako-runtime-20261025-172733/epako-runtime.html)
+<p align="center">
+  <a href="https://htmlpreview.github.io/?https://github.com/Rick1055/Epako/blob/main/.archify/architecture-epako-runtime-20261025-172733/epako-runtime.html">
+    <img src="https://img.shields.io/badge/Architecture-Interactive_Explorer-1A2B25?style=for-the-badge&logo=diagramsdotnet&logoColor=white" height="42" alt="Interactive Architecture Explorer" />
+  </a>
+</p>
 
 Epako Voice consists of a modern SSR web application, a high-throughput Python FastAPI gateway, on-device neural acoustic pipelines, and a secure Supabase persistence layer.
 

@@ -6,11 +6,11 @@
   "status": "pass",
   "visualReview": "not-requested",
   "provenance": "current",
-  "deliveryReceiptId": "2c2a028b-19fa-413b-a1b0-e1339b244735",
+  "deliveryReceiptId": "f411ef38-72a5-4327-88ab-867b83d732fc",
   "artifact": {
     "path": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-epako-runtime-20261025-172733\\epako-runtime.html",
-    "sha256": "3ae3db1289e4777b30aa59ea12e607cefe3d8567a8c8c5918d07644a06de250e",
-    "bytes": 862534
+    "sha256": "2883014e2a2a4cf361276c179e629400d208b15c0fa0a6d8d87be1d6aa1ab4c9",
+    "bytes": 881787
   },
   "state": {
     "detail": "read",
@@ -52,16 +52,14 @@
           "viewBoxHeight": 652
         },
         "viewBoxWidth": 1500,
-        "minimumProjectedNodeTextPx": 7.1786666666666665,
-        "minimumProjectedNonEdgeTextPx": 8.076,
+        "minimumProjectedNodeTextPx": 6.7299999999999995,
+        "minimumProjectedNonEdgeTextPx": 6.7299999999999995,
         "minimumProjectedEdgeTextPx": 7.1786666666666665,
-        "minimumProjectedNodeText": "audio + JWT",
-        "minimumProjectedNodeTextDetail": "edge",
+        "minimumProjectedNodeText": "React Router v7, AudioWorklet",
+        "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
-          "kind": "edge",
-          "id": "send-audio",
-          "from": "patient",
-          "to": "guard"
+          "kind": "node",
+          "id": "patient"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -104,16 +102,14 @@
           "viewBoxHeight": 652
         },
         "viewBoxWidth": 1500,
-        "minimumProjectedNodeTextPx": 8,
-        "minimumProjectedNonEdgeTextPx": 9,
+        "minimumProjectedNodeTextPx": 7.5,
+        "minimumProjectedNonEdgeTextPx": 7.5,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "audio + JWT",
-        "minimumProjectedNodeTextDetail": "edge",
+        "minimumProjectedNodeText": "React Router v7, AudioWorklet",
+        "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
-          "kind": "edge",
-          "id": "send-audio",
-          "from": "patient",
-          "to": "guard"
+          "kind": "node",
+          "id": "patient"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -156,16 +152,14 @@
           "viewBoxHeight": 652
         },
         "viewBoxWidth": 1500,
-        "minimumProjectedNodeTextPx": 8,
-        "minimumProjectedNonEdgeTextPx": 9,
+        "minimumProjectedNodeTextPx": 7.5,
+        "minimumProjectedNonEdgeTextPx": 7.5,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "audio + JWT",
-        "minimumProjectedNodeTextDetail": "edge",
+        "minimumProjectedNodeText": "React Router v7, AudioWorklet",
+        "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
-          "kind": "edge",
-          "id": "send-audio",
-          "from": "patient",
-          "to": "guard"
+          "kind": "node",
+          "id": "patient"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -208,16 +202,14 @@
           "viewBoxHeight": 652
         },
         "viewBoxWidth": 1500,
-        "minimumProjectedNodeTextPx": 8,
-        "minimumProjectedNonEdgeTextPx": 9,
+        "minimumProjectedNodeTextPx": 7.5,
+        "minimumProjectedNonEdgeTextPx": 7.5,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "audio + JWT",
-        "minimumProjectedNodeTextDetail": "edge",
+        "minimumProjectedNodeText": "React Router v7, AudioWorklet",
+        "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
-          "kind": "edge",
-          "id": "send-audio",
-          "from": "patient",
-          "to": "guard"
+          "kind": "node",
+          "id": "patient"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -313,16 +305,14 @@
           "viewBoxHeight": 652
         },
         "viewBoxWidth": 1500,
-        "minimumProjectedNodeTextPx": 7.1786666666666665,
-        "minimumProjectedNonEdgeTextPx": 8.076,
+        "minimumProjectedNodeTextPx": 6.7299999999999995,
+        "minimumProjectedNonEdgeTextPx": 6.7299999999999995,
         "minimumProjectedEdgeTextPx": 7.1786666666666665,
-        "minimumProjectedNodeText": "audio + JWT",
-        "minimumProjectedNodeTextDetail": "edge",
+        "minimumProjectedNodeText": "React Router v7, AudioWorklet",
+        "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
-          "kind": "edge",
-          "id": "send-audio",
-          "from": "patient",
-          "to": "guard"
+          "kind": "node",
+          "id": "patient"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -365,16 +355,14 @@
           "viewBoxHeight": 652
         },
         "viewBoxWidth": 1500,
-        "minimumProjectedNodeTextPx": 8,
-        "minimumProjectedNonEdgeTextPx": 9,
+        "minimumProjectedNodeTextPx": 7.5,
+        "minimumProjectedNonEdgeTextPx": 7.5,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "audio + JWT",
-        "minimumProjectedNodeTextDetail": "edge",
+        "minimumProjectedNodeText": "React Router v7, AudioWorklet",
+        "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
-          "kind": "edge",
-          "id": "send-audio",
-          "from": "patient",
-          "to": "guard"
+          "kind": "node",
+          "id": "patient"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -417,16 +405,14 @@
           "viewBoxHeight": 652
         },
         "viewBoxWidth": 1500,
-        "minimumProjectedNodeTextPx": 8,
-        "minimumProjectedNonEdgeTextPx": 9,
+        "minimumProjectedNodeTextPx": 7.5,
+        "minimumProjectedNonEdgeTextPx": 7.5,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "audio + JWT",
-        "minimumProjectedNodeTextDetail": "edge",
+        "minimumProjectedNodeText": "React Router v7, AudioWorklet",
+        "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
-          "kind": "edge",
-          "id": "send-audio",
-          "from": "patient",
-          "to": "guard"
+          "kind": "node",
+          "id": "patient"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -469,16 +455,14 @@
           "viewBoxHeight": 652
         },
         "viewBoxWidth": 1500,
-        "minimumProjectedNodeTextPx": 8,
-        "minimumProjectedNonEdgeTextPx": 9,
+        "minimumProjectedNodeTextPx": 7.5,
+        "minimumProjectedNonEdgeTextPx": 7.5,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "audio + JWT",
-        "minimumProjectedNodeTextDetail": "edge",
+        "minimumProjectedNodeText": "React Router v7, AudioWorklet",
+        "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
-          "kind": "edge",
-          "id": "send-audio",
-          "from": "patient",
-          "to": "guard"
+          "kind": "node",
+          "id": "patient"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -526,16 +510,14 @@
           "viewBoxHeight": 652
         },
         "viewBoxWidth": 1500,
-        "minimumProjectedNodeTextPx": 7.1786666666666665,
-        "minimumProjectedNonEdgeTextPx": 8.076,
+        "minimumProjectedNodeTextPx": 6.7299999999999995,
+        "minimumProjectedNonEdgeTextPx": 6.7299999999999995,
         "minimumProjectedEdgeTextPx": 7.1786666666666665,
-        "minimumProjectedNodeText": "audio + JWT",
-        "minimumProjectedNodeTextDetail": "edge",
+        "minimumProjectedNodeText": "React Router v7, AudioWorklet",
+        "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
-          "kind": "edge",
-          "id": "send-audio",
-          "from": "patient",
-          "to": "guard"
+          "kind": "node",
+          "id": "patient"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -578,16 +560,14 @@
           "viewBoxHeight": 652
         },
         "viewBoxWidth": 1500,
-        "minimumProjectedNodeTextPx": 8,
-        "minimumProjectedNonEdgeTextPx": 9,
+        "minimumProjectedNodeTextPx": 7.5,
+        "minimumProjectedNonEdgeTextPx": 7.5,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "audio + JWT",
-        "minimumProjectedNodeTextDetail": "edge",
+        "minimumProjectedNodeText": "React Router v7, AudioWorklet",
+        "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
-          "kind": "edge",
-          "id": "send-audio",
-          "from": "patient",
-          "to": "guard"
+          "kind": "node",
+          "id": "patient"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -630,16 +610,14 @@
           "viewBoxHeight": 652
         },
         "viewBoxWidth": 1500,
-        "minimumProjectedNodeTextPx": 8,
-        "minimumProjectedNonEdgeTextPx": 9,
+        "minimumProjectedNodeTextPx": 7.5,
+        "minimumProjectedNonEdgeTextPx": 7.5,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "audio + JWT",
-        "minimumProjectedNodeTextDetail": "edge",
+        "minimumProjectedNodeText": "React Router v7, AudioWorklet",
+        "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
-          "kind": "edge",
-          "id": "send-audio",
-          "from": "patient",
-          "to": "guard"
+          "kind": "node",
+          "id": "patient"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -682,16 +660,14 @@
           "viewBoxHeight": 652
         },
         "viewBoxWidth": 1500,
-        "minimumProjectedNodeTextPx": 8,
-        "minimumProjectedNonEdgeTextPx": 9,
+        "minimumProjectedNodeTextPx": 7.5,
+        "minimumProjectedNonEdgeTextPx": 7.5,
         "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "audio + JWT",
-        "minimumProjectedNodeTextDetail": "edge",
+        "minimumProjectedNodeText": "React Router v7, AudioWorklet",
+        "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
-          "kind": "edge",
-          "id": "send-audio",
-          "from": "patient",
-          "to": "guard"
+          "kind": "node",
+          "id": "patient"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,

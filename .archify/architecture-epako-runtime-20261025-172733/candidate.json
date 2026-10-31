@@ -10,81 +10,560 @@
       "url": "https://github.com/Rick1055/Epako.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "e5cc045382f12127eb50b573dad63a2e0b1d8c7d"
+      "revision": "91b6f6bedf3f243cb836486f942ab0eed32427e6"
     }
   },
   "components": [
-    { "id": "patient", "type": "external", "label": "Patient client", "sublabel": "browser / app", "tag": "anon key + JWT", "pos": [40, 200], "size": [140, 64],
-      "sources": [{ "path": "docs/contract.md", "line": 57, "end_line": 67, "label": "API contract" }] },
-    { "id": "auth", "type": "security", "label": "Supabase Auth", "sublabel": "JWT + Turnstile CAPTCHA", "pos": [290, 70], "size": [140, 64],
-      "sources": [{ "path": "src/api.py", "line": 138, "end_line": 149, "label": "verify_token" }, { "path": "AGENTS.md", "line": 43, "label": "CAPTCHA on sign-in" }] },
-    { "id": "hf", "type": "external", "label": "Hugging Face Hub", "sublabel": "Parakeet weights", "pos": [790, 70], "size": [140, 64],
-      "sources": [{ "path": "src/speech_recognizer.py", "line": 28, "end_line": 42, "label": "pipeline(model=...)" }] },
-    { "id": "guard", "type": "security", "label": "Auth + rate limit", "sublabel": "FastAPI dependency", "pos": [290, 200], "size": [140, 64],
-      "sources": [{ "path": "src/api.py", "line": 222, "end_line": 244, "label": "hit / rate_limit" }, { "path": "src/api.py", "line": 352, "end_line": 358, "label": "/api/rectify" }] },
-    { "id": "gate", "type": "backend", "label": "Speech gate", "sublabel": "Silero VAD, P >= 0.20", "pos": [540, 200], "size": [140, 64],
-      "sources": [{ "path": "src/speech_gate.py", "line": 52, "end_line": 54, "label": "contains_speech" }, { "path": "src/api.py", "line": 400, "end_line": 411, "label": "no speech: empty reply" }] },
-    { "id": "asr", "type": "backend", "label": "Parakeet-TDT ASR", "sublabel": "FP16 GPU, word conf.", "pos": [790, 200], "size": [140, 64],
-      "sources": [{ "path": "src/speech_recognizer.py", "line": 68, "end_line": 110, "label": "transcribe" }, { "path": "src/api.py", "line": 413, "end_line": 420, "label": "reads run meanwhile" }] },
-    { "id": "repair", "type": "backend", "label": "Intent repair", "sublabel": "repeats, fixes, snap", "pos": [1040, 200], "size": [140, 64],
-      "sources": [{ "path": "src/intent_repair.py", "line": 35, "end_line": 67, "label": "repair" }, { "path": "src/api.py", "line": 93, "end_line": 109, "label": "get_repair_engine" }] },
-    { "id": "tts", "type": "backend", "label": "Piper TTS", "sublabel": "on-device, saved voice", "pos": [1290, 200], "size": [140, 64],
-      "sources": [{ "path": "src/local_tts.py", "line": 57, "end_line": 85, "label": "synthesize" }, { "path": "src/api.py", "line": 427, "end_line": 441, "label": "voice + synth" }] },
-    { "id": "sessions", "type": "backend", "label": "Session routes", "sublabel": "learn, analyze, PDF", "pos": [290, 340], "size": [140, 64],
-      "sources": [{ "path": "src/api.py", "line": 666, "end_line": 689, "label": "save_utterance" }, { "path": "src/api.py", "line": 707, "end_line": 751, "label": "analyze" }, { "path": "src/api.py", "line": 757, "end_line": 827, "label": "report PDF" }] },
-    { "id": "biomarker", "type": "backend", "label": "Biomarker engine", "sublabel": "rate, jitter, formants", "pos": [540, 340], "size": [140, 64],
-      "sources": [{ "path": "src/biomarker_engine.py", "line": 18, "end_line": 91, "label": "articulation + phonation" }] },
-    { "id": "storage", "type": "database", "label": "Storage: patient_audio", "sublabel": "consent-gated upload", "pos": [40, 500], "size": [180, 64],
-      "sources": [{ "path": "supabase/migrations/20261025000000_deidentify_profiles.sql", "line": 48, "end_line": 74, "label": "consent policy" }, { "path": "src/api.py", "line": 596, "end_line": 637, "label": "purge on delete" }] },
-    { "id": "postgres", "type": "database", "label": "Supabase Postgres", "sublabel": "profiles, sessions, utterances, biomarkers: row-level security", "pos": [290, 500], "size": [1140, 64],
-      "sources": [{ "path": "supabase/migrations/20261023000000_init_schema.sql", "line": 109, "end_line": 112, "label": "RLS on" }, { "path": "supabase/migrations/20261031000000_profile_json_limits.sql", "line": 5, "end_line": 17, "label": "server-only learning" }] }
+    {
+      "id": "patient",
+      "type": "frontend",
+      "label": "Patient client",
+      "sublabel": "React Router v7, AudioWorklet",
+      "tag": "anon key + JWT",
+      "pos": [
+        40,
+        200
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "sources": [
+        {
+          "path": "web/package.json",
+          "line": 1,
+          "end_line": 43,
+          "label": "React Router v7 app"
+        },
+        {
+          "path": "web/app/routes/speak.tsx",
+          "line": 1,
+          "end_line": 60,
+          "label": "Audio Worklet recording"
+        }
+      ]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Supabase Auth",
+      "sublabel": "JWT + Turnstile CAPTCHA",
+      "pos": [
+        290,
+        70
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/api.py",
+          "line": 157,
+          "end_line": 180,
+          "label": "verify_token"
+        },
+        {
+          "path": "supabase/migrations/20261023000000_init_schema.sql",
+          "line": 1,
+          "end_line": 30,
+          "label": "auth schema"
+        }
+      ]
+    },
+    {
+      "id": "guard",
+      "type": "security",
+      "label": "Auth + rate limit",
+      "sublabel": "FastAPI dependency",
+      "pos": [
+        290,
+        200
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/api.py",
+          "line": 266,
+          "end_line": 310,
+          "label": "rate_limit"
+        },
+        {
+          "path": "src/api.py",
+          "line": 387,
+          "end_line": 415,
+          "label": "/api/rectify"
+        }
+      ]
+    },
+    {
+      "id": "promptguard",
+      "type": "security",
+      "label": "PromptGuard",
+      "sublabel": "OWASP LLM01 shield",
+      "pos": [
+        790,
+        340
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/prompt_guard.py",
+          "line": 12,
+          "end_line": 38,
+          "label": "check_prompt_injection"
+        },
+        {
+          "path": "src/api.py",
+          "line": 361,
+          "end_line": 375,
+          "label": "payload guard"
+        }
+      ]
+    },
+    {
+      "id": "gate",
+      "type": "backend",
+      "label": "Speech gate",
+      "sublabel": "Silero VAD, P >= 0.20",
+      "pos": [
+        540,
+        200
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/speech_gate.py",
+          "line": 52,
+          "end_line": 70,
+          "label": "contains_speech"
+        },
+        {
+          "path": "src/api.py",
+          "line": 420,
+          "end_line": 440,
+          "label": "energy-gated stream"
+        }
+      ]
+    },
+    {
+      "id": "hf",
+      "type": "external",
+      "label": "Hugging Face Hub",
+      "sublabel": "Parakeet weights",
+      "pos": [
+        790,
+        70
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/speech_recognizer.py",
+          "line": 28,
+          "end_line": 45,
+          "label": "pipeline(model=...)"
+        }
+      ]
+    },
+    {
+      "id": "asr",
+      "type": "backend",
+      "label": "Parakeet-TDT ASR",
+      "sublabel": "FP16 GPU, word conf.",
+      "pos": [
+        790,
+        200
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/speech_recognizer.py",
+          "line": 68,
+          "end_line": 115,
+          "label": "transcribe"
+        },
+        {
+          "path": "src/api.py",
+          "line": 440,
+          "end_line": 465,
+          "label": "concurrent recognition"
+        }
+      ]
+    },
+    {
+      "id": "repair",
+      "type": "backend",
+      "label": "Intent repair",
+      "sublabel": "repeats, fixes, snap",
+      "pos": [
+        1040,
+        200
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/intent_repair.py",
+          "line": 35,
+          "end_line": 67,
+          "label": "repair"
+        },
+        {
+          "path": "src/api.py",
+          "line": 93,
+          "end_line": 109,
+          "label": "get_repair_engine"
+        }
+      ]
+    },
+    {
+      "id": "tts",
+      "type": "backend",
+      "label": "Piper TTS",
+      "sublabel": "on-device, saved voice",
+      "pos": [
+        1290,
+        200
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/local_tts.py",
+          "line": 57,
+          "end_line": 85,
+          "label": "synthesize"
+        },
+        {
+          "path": "src/voice_restoration.py",
+          "line": 45,
+          "end_line": 70,
+          "label": "create_sculpted_profile"
+        }
+      ]
+    },
+    {
+      "id": "sessions",
+      "type": "backend",
+      "label": "Session routes",
+      "sublabel": "learn, analyze, PDF",
+      "pos": [
+        290,
+        340
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/api.py",
+          "line": 723,
+          "end_line": 770,
+          "label": "save_utterance"
+        },
+        {
+          "path": "src/api.py",
+          "line": 835,
+          "end_line": 910,
+          "label": "clinical PDF report"
+        }
+      ]
+    },
+    {
+      "id": "biomarker",
+      "type": "backend",
+      "label": "Biomarker engine",
+      "sublabel": "rate, jitter, formants",
+      "pos": [
+        540,
+        340
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/biomarker_engine.py",
+          "line": 18,
+          "end_line": 91,
+          "label": "articulation + phonation"
+        },
+        {
+          "path": "src/api.py",
+          "line": 780,
+          "end_line": 825,
+          "label": "/api/session/analyze"
+        }
+      ]
+    },
+    {
+      "id": "storage",
+      "type": "database",
+      "label": "Storage: patient_audio",
+      "sublabel": "consent-gated upload",
+      "pos": [
+        40,
+        500
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "supabase/migrations/20261025000000_deidentify_profiles.sql",
+          "line": 48,
+          "end_line": 74,
+          "label": "consent policy"
+        },
+        {
+          "path": "src/api.py",
+          "line": 653,
+          "end_line": 688,
+          "label": "purge on delete"
+        }
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "Supabase Postgres",
+      "sublabel": "profiles, sessions, utterances, biomarkers: row-level security",
+      "pos": [
+        290,
+        500
+      ],
+      "size": [
+        1140,
+        64
+      ],
+      "sources": [
+        {
+          "path": "supabase/migrations/20261023000000_init_schema.sql",
+          "line": 109,
+          "end_line": 140,
+          "label": "RLS on"
+        },
+        {
+          "path": "supabase/migrations/20261031000000_profile_json_limits.sql",
+          "line": 5,
+          "end_line": 17,
+          "label": "server-only learning"
+        }
+      ]
+    }
   ],
   "boundaries": [
-    { "kind": "region", "label": "FastAPI server: recognition and voice run on this machine", "wraps": ["guard", "gate", "asr", "repair", "tts", "sessions", "biomarker"] },
-    { "kind": "security-group", "label": "Supabase data: row-level security on every table and the audio bucket", "wraps": ["storage", "postgres"] }
+    {
+      "kind": "region",
+      "label": "FastAPI server: recognition and voice run on this machine",
+      "wraps": [
+        "guard",
+        "promptguard",
+        "gate",
+        "asr",
+        "repair",
+        "tts",
+        "sessions",
+        "biomarker"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Supabase data: row-level security on every table and the audio bucket",
+      "wraps": [
+        "storage",
+        "postgres"
+      ]
+    }
   ],
   "connections": [
-    { "id": "send-audio", "from": "patient", "to": "guard", "label": "audio + JWT", "variant": "emphasis" },
-    { "id": "verify-jwt", "from": "guard", "to": "auth", "label": "verify JWT", "variant": "security" },
-    { "id": "allowed", "from": "guard", "to": "gate", "label": "allowed", "variant": "emphasis" },
-    { "id": "speech-only", "from": "gate", "to": "asr", "label": "speech only", "variant": "emphasis" },
-    { "id": "weights", "from": "hf", "to": "asr", "label": "weights", "variant": "dashed" },
-    { "id": "text-conf", "from": "asr", "to": "repair", "label": "text + conf.", "variant": "emphasis" },
-    { "id": "fixed-text", "from": "repair", "to": "tts", "label": "fixed text", "variant": "emphasis" },
-    { "id": "spoken-reply", "from": "tts", "to": "patient", "label": "spoken reply (WAV)", "variant": "emphasis", "fromSide": "top", "toSide": "top", "via": [[1360, 30], [110, 30]] },
-    { "id": "read-learning", "from": "repair", "to": "postgres", "label": "fixes + vocab", "variant": "security" },
-    { "id": "read-voice", "from": "tts", "to": "postgres", "label": "saved voice", "variant": "security" },
-    { "id": "to-sessions", "from": "guard", "to": "sessions", "label": "other routes" },
-    { "id": "analyze", "from": "sessions", "to": "biomarker", "label": "analyze" },
-    { "id": "server-writes", "from": "sessions", "to": "postgres", "label": "service key", "variant": "security" },
-    { "id": "purge-audio", "from": "sessions", "to": "storage", "label": "purge on delete", "fromSide": "left", "toSide": "top" }
+    {
+      "id": "send-audio",
+      "from": "patient",
+      "to": "guard",
+      "label": "audio + JWT",
+      "variant": "emphasis"
+    },
+    {
+      "id": "verify-jwt",
+      "from": "guard",
+      "to": "auth",
+      "label": "verify JWT",
+      "variant": "security"
+    },
+    {
+      "id": "guard-prompt",
+      "from": "guard",
+      "to": "promptguard",
+      "label": "screen text",
+      "variant": "security"
+    },
+    {
+      "id": "allowed",
+      "from": "guard",
+      "to": "gate",
+      "label": "allowed",
+      "variant": "emphasis"
+    },
+    {
+      "id": "speech-only",
+      "from": "gate",
+      "to": "asr",
+      "label": "speech only",
+      "variant": "emphasis"
+    },
+    {
+      "id": "weights",
+      "from": "hf",
+      "to": "asr",
+      "label": "weights",
+      "variant": "dashed"
+    },
+    {
+      "id": "text-conf",
+      "from": "asr",
+      "to": "repair",
+      "label": "text + conf.",
+      "variant": "emphasis"
+    },
+    {
+      "id": "fixed-text",
+      "from": "repair",
+      "to": "tts",
+      "label": "fixed text",
+      "variant": "emphasis"
+    },
+    {
+      "id": "spoken-reply",
+      "from": "tts",
+      "to": "patient",
+      "label": "spoken reply (WAV)",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "top",
+      "via": [
+        [
+          1360,
+          30
+        ],
+        [
+          110,
+          30
+        ]
+      ]
+    },
+    {
+      "id": "read-learning",
+      "from": "repair",
+      "to": "postgres",
+      "label": "fixes + vocab",
+      "variant": "security"
+    },
+    {
+      "id": "read-voice",
+      "from": "tts",
+      "to": "postgres",
+      "label": "saved voice",
+      "variant": "security"
+    },
+    {
+      "id": "to-sessions",
+      "from": "guard",
+      "to": "sessions",
+      "label": "other routes"
+    },
+    {
+      "id": "sessions-analyze",
+      "from": "sessions",
+      "to": "biomarker",
+      "label": "analyze"
+    },
+    {
+      "id": "server-writes",
+      "from": "sessions",
+      "to": "postgres",
+      "label": "service key",
+      "variant": "security"
+    },
+    {
+      "id": "purge-audio",
+      "from": "sessions",
+      "to": "storage",
+      "label": "purge on delete",
+      "fromSide": "left",
+      "toSide": "top"
+    }
   ],
   "cards": [
-    { "dot": "emerald", "title": "Primary path: POST /api/rectify", "items": [
-      "Silence or noise returns empty text and no audio; the recording is never echoed back",
-      "WS /ws/rectify runs the same steps per utterance, on the same rate budget",
-      "A broken saved voice returns the text with no audio; no other voice speaks for the patient",
-      "Database reads run while the recogniser does",
-      "Measured 2026-10-25 (RTX 3050 on mains power, live Supabase, warm): the patient waits median 772 ms, p90 1,190 ms; ~480 ms is the sign-in check and rate limit (two ~220 ms database round trips), ASR ~140 ms"
-    ] },
-    { "dot": "rose", "title": "Trust boundaries", "items": [
-      "Clients hold only the public anon key and their own JWT; the service-role key stays on the server",
-      "Clients can call Supabase directly, so row-level security, not the API, is the real wall",
-      "Live attack (scripts/attack_live.py): 40 of 40 attempts blocked on 2026-10-25"
-    ] },
-    { "dot": "violet", "title": "Learning loop", "items": [
-      "POST /api/sessions/{id}/utterances: the patient's yes/no teaches word fixes (FeedbackEngine) and their vocabulary",
-      "Only the server writes what it learns (migration 20261031)",
-      "Snapping is on only while the patient repeats known words"
-    ] },
-    { "dot": "amber", "title": "Clinicians and reports", "items": [
-      "A verified clinician reads a patient only after redeeming that patient's link code",
-      "The PDF is built from stored rows under the caller's JWT; nothing clinical comes from the request"
-    ] },
-    { "dot": "slate", "title": "Not drawn", "items": [
-      "The frontend (epako_sylva_experience.html) is a mock, not yet wired to the API",
-      "Voice banking, voice sculpt and /api/biomarkers routes",
-      "Rate limiter state lives in Postgres (rate_limit_hit RPC, service key)"
-    ] }
+    {
+      "dot": "emerald",
+      "title": "Primary path: POST /api/rectify",
+      "items": [
+        "Silence or noise returns empty text and no audio; the recording is never echoed back",
+        "WS /ws/rectify runs the same steps per utterance, on the same rate budget",
+        "A broken saved voice returns the text with no audio; no other voice speaks for the patient",
+        "Database reads run while the recogniser does",
+        "Measured 2026-10-25 (RTX 3050 on mains power, live Supabase, warm): the patient waits median 772 ms, p90 1,190 ms; ~480 ms is the sign-in check and rate limit (two ~220 ms database round trips), ASR ~140 ms"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Trust boundaries & security",
+      "items": [
+        "Clients hold only the public anon key and their own JWT; the service-role key stays on the server",
+        "OWASP LLM01: PromptGuard inspects transcripts and text inputs for adversarial delimiter overrides",
+        "Clients can call Supabase directly, so row-level security, not the API, is the real wall",
+        "Live attack (scripts/attack_live.py): 40 of 40 attempts blocked on 2026-10-25"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Learning loop",
+      "items": [
+        "POST /api/sessions/{id}/utterances: the patient's yes/no teaches word fixes (FeedbackEngine) and their vocabulary",
+        "Only the server writes what it learns (migration 20261031)",
+        "Snapping is on only while the patient repeats known words"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Clinicians and reports",
+      "items": [
+        "A verified clinician reads a patient only after redeeming that patient's link code",
+        "The PDF is built from stored rows under the caller's JWT; nothing clinical comes from the request",
+        "Objective biomarkers (F0, Formant Compression Index, Jitter, Shimmer) computed automatically"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Production web frontend",
+      "items": [
+        "Modern full-stack web application built with React Router v7 (web/) with SSR and PWA capabilities",
+        "WebAudio AudioWorklet streams 16 kHz mono chunks directly to WebSocket gateway without main-thread jank",
+        "Features voice calibration studio, parametric timbre sculpting, clinician portal, and patient progress telemetry"
+      ]
+    }
   ]
 }

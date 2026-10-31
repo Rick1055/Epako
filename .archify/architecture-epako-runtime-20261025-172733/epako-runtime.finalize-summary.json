@@ -7,13 +7,13 @@
   "quality": "showcase",
   "specification": {
     "path": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-epako-runtime-20261025-172733\\candidate.json",
-    "sha256": "f97e0a72e1a097ea1531c49ef49d6aa228d7f04cec3b7651219010f2e4411cc1",
-    "bytes": 8049
+    "sha256": "937f290ba1ce7dcf9b435c0ec12e335e25755b8ae05ed8f7cb80279457dac06d",
+    "bytes": 13511
   },
   "artifact": {
     "path": "C:\\Users\\HP\\Desktop\\Dysarthria Speech Correction\\.archify\\architecture-epako-runtime-20261025-172733\\epako-runtime.html",
-    "sha256": "3ae3db1289e4777b30aa59ea12e607cefe3d8567a8c8c5918d07644a06de250e",
-    "bytes": 862534
+    "sha256": "d10b5e134ee5c6b5856784cb691f02b1be82fea08bad45893746f74eb73c672d",
+    "bytes": 867051
   },
   "gates": {
     "validate": "pass",
@@ -37,13 +37,13 @@
     "installedVersion": "3.2.0",
     "availableVersion": "3.2.0",
     "releaseNotes": null,
-    "checkedAt": "2026-10-25T11:58:05.439Z",
+    "checkedAt": "2026-10-31T06:10:37.329Z",
     "source": "cache",
     "noticeRequired": false,
     "noticeText": null
   },
   "visualReview": "not-requested",
-  "durationMs": 8618,
+  "durationMs": 8534,
   "browserCheck": {
     "requested": true,
     "ran": true
